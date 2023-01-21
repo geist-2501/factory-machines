@@ -1,0 +1,1 @@
+from factory_machines_env.wrappers.factory_machines_flatten import FactoryMachinesFlattenWrapper

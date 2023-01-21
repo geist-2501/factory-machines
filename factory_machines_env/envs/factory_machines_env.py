@@ -91,9 +91,6 @@ class FactoryMachinesEnv(gym.Env):
 
         obs = self._get_obs()
 
-        if self.render_mode == "human":
-            self._render_human()
-
         return obs, {}
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
@@ -101,7 +98,8 @@ class FactoryMachinesEnv(gym.Env):
         if action < 4:
             # Action is a move op.
             direction = self._action_to_direction[action]
-            self._agent = np.clip(self._agent + direction, 0, self.size - 1)
+            new_pos = self._agent + direction
+            self._agent = np.clip(new_pos, 0, self.size - 1)
         elif action == 4:
             # Action is a grab op.
             if self._try_grab() is False:
@@ -113,14 +111,12 @@ class FactoryMachinesEnv(gym.Env):
 
         terminated = sum(self._required.values()) == 0
 
-        reward = 10 if terminated else 0
-        reward += illegal_move_punishment
+        reward = 100 if terminated else 0
+        reward -= illegal_move_punishment
+        reward -= 0.05
 
         obs = self._get_obs()
         info = {}
-
-        header_text = f"w:{self._required[self.res_wood]} s:{self._required[self.res_steel]} c:{self._carrying}"
-        print(header_text)
 
         return obs, reward, terminated, False, info
 
