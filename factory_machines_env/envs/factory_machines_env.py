@@ -1,4 +1,3 @@
-import math
 from typing import Optional, Union, List, Tuple
 
 import gym
@@ -12,15 +11,16 @@ class FactoryMachinesEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
     def __init__(self, render_mode: Optional[str] = None, size=5, recipe_complexity=3) -> None:
-        self.size = size  # The size of the square grid
-        self.window_size = 512  # The size of the PyGame window
+        self.size = size  # The size of the square grid.
+        self.window_size = 512  # The size of the PyGame window.
+        self.window_header = 100  # The size of the information header.
         self.recipe_complexity = recipe_complexity
 
         self.res_out = 0
         self.res_steel = 1
         self.res_wood = 2
 
-        self._piles = np.zeros((3, 2))
+        self._piles = np.zeros((3, 2), dtype=int)
         self._piles[self.res_out] = [0, 0]
         self._piles[self.res_steel] = [0, size - 1]
         self._piles[self.res_wood] = [size - 1, 0]
@@ -44,10 +44,10 @@ class FactoryMachinesEnv(gym.Env):
                 "out_pile": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                 "steel_pile": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                 "wood_pile": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "req_wood": spaces.Box(0, recipe_complexity, dtype=int),
-                "req_steel": spaces.Box(0, recipe_complexity, dtype=int),
+                "req_wood": spaces.Discrete(recipe_complexity),
+                "req_steel": spaces.Discrete(recipe_complexity),
                 "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "carrying": spaces.Box(0, 2, dtype=int)
+                "carrying": spaces.Discrete(3)
             }
         )
 
@@ -55,10 +55,10 @@ class FactoryMachinesEnv(gym.Env):
 
         # Utility vectors for moving the agent.
         self._action_to_direction = {
-            0: np.array([1, 0]),
-            1: np.array([0, 1]),
-            2: np.array([-1, 0]),
-            3: np.array([0, -1]),
+            0: np.array([0, -1]),  # w 0, -1
+            1: np.array([-1, 0]),  # a -1, 0
+            2: np.array([0, 1]),  # s 0, 1
+            3: np.array([1, 0]),  # d 1, 0
         }
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -82,16 +82,16 @@ class FactoryMachinesEnv(gym.Env):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
         super().reset(seed=seed, options=options)
 
-        self._agent = self.np_random.integers(0, self.size)
+        self._agent = self.np_random.integers(0, self.size, size=2, dtype=int)
 
-        self._required[self.res_wood] = self.np_random.integers(1, self.recipe_complexity, endpoint=True)
-        self._required[self.res_steel] = self.np_random.integers(0, self.recipe_complexity, endpoint=True)
+        self._required[self.res_wood] = self.np_random.integers(1, self.recipe_complexity, endpoint=True, dtype=int)
+        self._required[self.res_steel] = self.np_random.integers(0, self.recipe_complexity, endpoint=True, dtype=int)
 
         self._carrying = 0
 
         obs = self._get_obs()
 
-        if self.render_mode is "human":
+        if self.render_mode == "human":
             self._render_human()
 
         return obs, {}
@@ -111,7 +111,7 @@ class FactoryMachinesEnv(gym.Env):
             if self._try_drop() is False:
                 illegal_move_punishment = 5
 
-        terminated = sum(self._required.values()) is 0
+        terminated = sum(self._required.values()) == 0
 
         reward = 10 if terminated else 0
         reward += illegal_move_punishment
@@ -119,23 +119,21 @@ class FactoryMachinesEnv(gym.Env):
         obs = self._get_obs()
         info = {}
 
+        header_text = f"w:{self._required[self.res_wood]} s:{self._required[self.res_steel]} c:{self._carrying}"
+        print(header_text)
+
         return obs, reward, terminated, False, info
 
     def render(self) -> Optional[Union[RenderFrame, List[RenderFrame]]]:
-        if self.render_mode is "human":
-            return self._render_human()
-        else:
-            return self._render_ansi()
+        return self._render_human()
 
     def _render_human(self):
-        assert self.render_mode is "human"
-
-        if self.window is None:
+        if self.window is None and self.render_mode == "human":
             pygame.init()
             pygame.display.set_caption("Factory Machines")
             pygame.display.init()
             self.window = pygame.display.set_mode((self.window_size, self.window_size))
-        if self.clock is None:
+        if self.clock is None and self.render_mode == "human":
             self.clock = pygame.time.Clock()
 
         canvas = pygame.Surface((self.window_size, self.window_size))
@@ -181,24 +179,45 @@ class FactoryMachinesEnv(gym.Env):
                 width=3,
             )
 
-        self.window.blit(canvas, canvas.get_rect())
-        pygame.event.pump()
-        pygame.display.update()
+        if self.render_mode == "human":
+            # The following line copies our drawings from `canvas` to the visible window
+            self.window.blit(canvas, canvas.get_rect())
+            pygame.event.pump()
+            pygame.display.update()
 
-        # We need to ensure that human-rendering occurs at the predefined framerate.
-        # The following line will automatically add a delay to keep the framerate stable.
-        self.clock.tick(self.metadata["render_fps"])
+            # We need to ensure that human-rendering occurs at the predefined framerate.
+            # The following line will automatically add a delay to keep the framerate stable.
+            self.clock.tick(self.metadata["render_fps"])
+        else:  # rgb_array
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
+            )
 
     def _render_ansi(self):
         pass
 
+    def close(self):
+        if self.window is not None:
+            pygame.display.quit()
+            pygame.quit()
+
+    def get_keys_to_action(self):
+        return {
+            'w': 0,
+            'a': 1,
+            's': 2,
+            'd': 3,
+            'g': 4,
+            't': 5,
+        }
+
     def _try_grab(self) -> bool:
-        if self._carrying is not 0:
+        if self._carrying != 0:
             return False
 
         valid_res = [self.res_wood, self.res_steel]
         for res in valid_res:
-            if np.equal(self._agent, self._piles[res]):
+            if np.array_equal(self._agent, self._piles[res]):
                 # Successfully grabbed a resource.
                 self._carrying = res
                 return True
@@ -206,5 +225,10 @@ class FactoryMachinesEnv(gym.Env):
         return False
 
     def _try_drop(self) -> bool:
-        return self._carrying is not 0 and \
-            np.equal(self._agent, self._piles[self.res_out])
+        if self._carrying != 0 and \
+                np.array_equal(self._agent, self._piles[self.res_out]):
+            self._required[self._carrying] = max(self._required[self._carrying] - 1, 0)
+            self._carrying = 0
+            return True
+
+        return False

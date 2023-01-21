@@ -1,4 +1,4 @@
-name: factory-machines-env
+name: factory_machines_env
 channels:
   - pytorch
   - nvidia
