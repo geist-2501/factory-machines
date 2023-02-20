@@ -1,4 +1,3 @@
-import math
 from collections import defaultdict
 from time import sleep
 
@@ -70,7 +69,7 @@ class QLearningAgent:
 
     def get_epsilon_action(self, state) -> int:
         """
-        Compute the action to take in the current state, including exploration according to a
+        Compute the action to take in the current state, including exploration according to an
         epsilon-greedy policy.
         """
 
@@ -112,15 +111,14 @@ def train_q_learning_agent(env: gym.Env, agent: QLearningAgent, n_episodes=1000,
             plt.pause(0.05)
 
 
-def play_agent(env: gym.Env, agent: QLearningAgent, episode_max_t=10**4, wait_time_ms=500):
+def play_agent(env: gym.Env, agent: QLearningAgent, episode_max_t=10**4, wait_time_s=0.5):
     s, _ = env.reset()
     for _ in range(episode_max_t):
         a = agent.get_optimal_action(s)
         s, _, is_done, _, _ = env.step(a)
         env.render()
 
-        print("waiting!")
-        sleep(0.5)
+        sleep(wait_time_s)
 
         if is_done:
             break
