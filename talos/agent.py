@@ -1,6 +1,5 @@
 import time
 from abc import ABC, abstractmethod
-import matplotlib.pyplot as plt
 
 import gym
 

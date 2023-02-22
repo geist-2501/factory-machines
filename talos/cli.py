@@ -3,7 +3,6 @@ from typing import Optional
 import gym
 import torch
 import typer
-import configparser
 from rich import print
 from talos.registration import get_agent, registry
 from talos.config import app as config_app, load_config
@@ -89,25 +88,8 @@ def train(
     if not config:
         raise typer.Abort()
 
-    device = _get_device()
-
-    # Load environment.
-    def env_factory(seed: int):
-        return gym.make(opt_env).unwrapped
-
-    try:
-        agent_factory, training_wrapper = get_agent(opt_agent)
-    except AgentNotFound:
-        print(f"[bold red]Couldn't find agent {opt_agent}[/]")
-        raise typer.Abort()
-
-    env = env_factory(0)
-    agent = agent_factory(
-        env.observation_space.shape,
-        env.action_space.n,
-    )
-
-    _load_weights(agent, opt_weights)
+    env_factory = _create_env_factory(opt_env)
+    agent, training_wrapper = _create_agent(env_factory, opt_agent, opt_weights)
 
     agent_config = config[opt_agent]
     print(f"\nProceeding to train a {opt_agent} on {opt_env} with config values:")
@@ -151,26 +133,11 @@ def play(
             prompt="Path to serialised agent weights?"
         )
 ):
-    # Load environment.
-    def env_factory(seed: int):
-        return gym.make(opt_env, render_mode='human').unwrapped
+    env_factory = _create_env_factory(opt_env)
+    agent, training_wrapper = _create_agent(env_factory, opt_agent, opt_weights)
 
     try:
-        agent_factory, training_wrapper = get_agent(opt_agent)
-    except AgentNotFound:
-        print(f"[bold red]Couldn't find agent {opt_agent}[/]")
-        raise typer.Abort()
-
-    env = env_factory(0)
-    agent = agent_factory(
-        env.observation_space.shape,
-        env.action_space.n,
-    )
-
-    _load_weights(agent, opt_weights)
-
-    try:
-        play_agent(agent, env)
+        play_agent(agent, env_factory(0))
     except KeyboardInterrupt:
         raise typer.Abort()
 
@@ -190,3 +157,31 @@ def _load_weights(agent, opt_weights):
         except OSError as ex:
             print("...[bold red]failed![/bold red] " + ex.strerror)
             typer.confirm("Do you want to continue?", abort=True)
+
+
+def _create_agent(env_factory, opt_agent, opt_weights):
+    try:
+        agent_factory, training_wrapper = get_agent(opt_agent)
+    except AgentNotFound:
+        print(f"[bold red]Couldn't find agent {opt_agent}[/]")
+        raise typer.Abort()
+
+    device = _get_device()
+    env = env_factory(0)
+    agent = agent_factory(
+        env.observation_space.shape,
+        env.action_space.n,
+        device
+    )
+    _load_weights(agent, opt_weights)
+    return agent, training_wrapper
+
+
+def _create_env_factory(env_name=None):
+    def env_factory(seed: int):
+        env = gym.make(env_name, render_mode='human').unwrapped
+        if seed is not None:
+            env.reset(seed=seed)
+        return env
+
+    return env_factory
