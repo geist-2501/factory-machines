@@ -1,5 +1,6 @@
 import typer
 import configparser
+from rich import print
 
 app = typer.Typer()
 
@@ -45,3 +46,16 @@ def create(
         config.write(configfile)
 
     typer.echo(f"Wrote config file '{path}'")
+
+
+def load_config(config_path: str) -> configparser.ConfigParser | None:
+    config = configparser.ConfigParser()
+    result = config.read(config_path)
+    if not result:
+        print(f"Could not load config {config}.")
+        return None
+    else:
+        print(f"Loaded config {config_path}, contains settings for {config.sections()}.")
+        return config
+
+

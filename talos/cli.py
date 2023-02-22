@@ -5,18 +5,32 @@ import torch
 import typer
 import configparser
 from rich import print
-from talos import __version__, __app_name__
-from talos.agents import resolve_agent
-from talos.output import print_err
-import talos.config
+from talos.registration import get_agent, registry
+from talos.config import app as config_app, load_config
+from talos.error import *
+from talos.agent import play_agent
 
 app = typer.Typer()
-app.add_typer(talos.config.app, name="config")
+app.add_typer(config_app, name="config")
+
+__app_name__ = "talos"
+__version__ = "0.1.0"
+
+
+def talos_app():
+    app(prog_name=__app_name__)
 
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"{__app_name__} v{__version__}")
+        typer.echo(r"""
+ _____  _    _     ___  ____  
+|_   _|/ \  | |   / _ \/ ___| 
+  | | / _ \ | |  | | | \___ \ 
+  | |/ ___ \| |__| |_| |___) |
+  |_/_/   \_\_____\___/|____/
+  RL agent training assistant""")
+        print(f"[bold green]  v{__version__}[/]")
         raise typer.Exit()
 
 
@@ -32,6 +46,14 @@ def main(
     )
 ) -> None:
     return
+
+
+@app.command("list")
+def list_agents():
+    """List all registered agents."""
+    print("[bold]Currently registered agents[/]:")
+    for agent in registry.keys():
+        print(agent)
 
 
 @app.command()
@@ -53,26 +75,118 @@ def train(
             "--env",
             "-e",
             prompt="Environment to train in?"
+        ),
+        opt_weights: str = typer.Option(
+            None,
+            "--weights",
+            "-w"
         )
 ) -> None:
     """Train an agent on a given environment."""
 
     # Load config.
-    config = configparser.ConfigParser()
-    config.read(opt_config)
-    print(f"Loaded config {opt_config}, contains settings for {config.sections()}")
+    config = load_config(opt_config)
+    if not config:
+        raise typer.Abort()
 
-    # Get device.
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device [bold green]{device}[/bold green]")
+    device = _get_device()
 
     # Load environment.
     def env_factory(seed: int):
         return gym.make(opt_env).unwrapped
 
-    training_wrapper = resolve_agent(opt_agent)
+    try:
+        agent_factory, training_wrapper = get_agent(opt_agent)
+    except AgentNotFound:
+        print(f"[bold red]Couldn't find agent {opt_agent}[/]")
+        raise typer.Abort()
 
-    if training_wrapper is None:
-        print_err(f"Couldn't resolve agent {opt_agent}")
+    env = env_factory(0)
+    agent = agent_factory(
+        env.observation_space.shape,
+        env.action_space.n,
+    )
 
-    training_wrapper(env_factory, config)
+    _load_weights(agent, opt_weights)
+
+    agent_config = config[opt_agent]
+    print(f"\nProceeding to train a {opt_agent} on {opt_env} with config values:")
+    print(dict(agent_config))
+
+    if typer.confirm("Ready to proceed?", default=True) is False:
+        return
+
+    try:
+        training_wrapper(env_factory, agent, agent_config)
+    except KeyboardInterrupt:
+        print("[bold red]Training interrupted[/bold red]")
+
+    if typer.confirm("Save agent to disk?"):
+        try:
+            path = typer.prompt("Enter a path to save to")
+            print(f"Saving agent to disk ([italic]{path}[/]) ...")
+            agent.save(path)
+        except OSError as ex:
+            print("[bold red]Saving failed![/] " + ex.strerror)
+
+
+@app.command()
+def play(
+        opt_agent: str = typer.Option(
+            "DQN",
+            "--agent",
+            "-a",
+            prompt="Agent you want to play?"
+        ),
+        opt_env: str = typer.Option(
+            "CartPole-v1",
+            "--env",
+            "-e",
+            prompt="Environment to play in?"
+        ),
+        opt_weights: str = typer.Option(
+            None,
+            "--weights",
+            "-w",
+            prompt="Path to serialised agent weights?"
+        )
+):
+    # Load environment.
+    def env_factory(seed: int):
+        return gym.make(opt_env, render_mode='human').unwrapped
+
+    try:
+        agent_factory, training_wrapper = get_agent(opt_agent)
+    except AgentNotFound:
+        print(f"[bold red]Couldn't find agent {opt_agent}[/]")
+        raise typer.Abort()
+
+    env = env_factory(0)
+    agent = agent_factory(
+        env.observation_space.shape,
+        env.action_space.n,
+    )
+
+    _load_weights(agent, opt_weights)
+
+    try:
+        play_agent(agent, env)
+    except KeyboardInterrupt:
+        raise typer.Abort()
+
+
+def _get_device():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device [bold green]{device}[/bold green]")
+    return device
+
+
+def _load_weights(agent, opt_weights):
+    if opt_weights is not None:
+        try:
+            print("\nLoading weights...")
+            agent.load(opt_weights)
+            print("...[bold green]success![/bold green]")
+        except OSError as ex:
+            print("...[bold red]failed![/bold red] " + ex.strerror)
+            typer.confirm("Do you want to continue?", abort=True)

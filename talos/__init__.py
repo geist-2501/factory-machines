@@ -1,2 +1,3 @@
-__app_name__ = "talos"
-__version__ = "0.1.0"
+from talos.registration import register
+from talos.cli import talos_app
+from talos.agent import Agent

@@ -1,3 +1,4 @@
+import configparser
 from typing import Callable
 
 import gym
@@ -8,6 +9,7 @@ import matplotlib.pyplot as plt
 from tqdm import trange
 from factory_machines.utils import LinearDecay
 from factory_machines.replay_buffer import ReplayBuffer
+from talos import Agent
 
 
 class DQN(nn.Module):
@@ -25,7 +27,7 @@ class DQN(nn.Module):
         return self.net(states)
 
 
-class DQNAgent:
+class DQNAgent(Agent):
     def __init__(self, state_shape, n_actions, epsilon=0, gamma=0.99, device='cpu'):
         super().__init__()
         self.epsilon = epsilon
@@ -47,11 +49,6 @@ class DQNAgent:
     def update_target_net(self):
         self.target_net.load_state_dict(self.net.state_dict())
 
-    def get_qvalues(self, states):
-        states = torch.tensor(states, device=self.device, dtype=torch.float32)
-        qvalues = self.forward(states)
-        return qvalues.data.cpu().numpy()
-
     def compute_loss(
             self,
             states: np.ndarray,
@@ -60,16 +57,15 @@ class DQNAgent:
             next_states: np.ndarray,
             is_done: np.ndarray
     ) -> torch.Tensor:
-        states = torch.tensor(states, device=self.device, dtype=torch.float32)  # shape: [batch_size, *state_shape]
-        actions = torch.tensor(actions, device=self.device, dtype=torch.int64)  # shape: [batch_size]
-        rewards = torch.tensor(rewards, device=self.device, dtype=torch.float32)  # shape: [batch_size]
-        # shape: [batch_size, *state_shape]
+        states = torch.tensor(states, device=self.device, dtype=torch.float32)
+        actions = torch.tensor(actions, device=self.device, dtype=torch.int64)
+        rewards = torch.tensor(rewards, device=self.device, dtype=torch.float32)
         next_states = torch.tensor(next_states, device=self.device, dtype=torch.float)
         is_done = torch.tensor(
             is_done.astype('uint8'),
             device=self.device,
             dtype=torch.uint8,
-        )  # shape: [batch_size]
+        )
 
         # get q-values for all actions in current states
         predicted_qvalues = self.net(states)  # shape: [batch_size, n_actions]
@@ -93,6 +89,9 @@ class DQNAgent:
         loss = torch.mean((predicted_qvalues_for_actions - target_qvalues_for_actions.detach()) ** 2)
 
         return loss
+
+    def get_action(self, state):
+        return self.get_optimal_actions(np.array([state]))[0]
 
     def get_epsilon_actions(self, states: np.ndarray):
         """Pick actions according to an epsilon greedy strategy."""
@@ -151,7 +150,8 @@ def _evaluate(
         env: gym.Env,
         agent: DQNAgent,
         n_episodes=1,
-        max_episode_steps=10000
+        max_episode_steps=10000,
+        display=False
 ):
     mean_ep_rewards = []
     for _ in range(n_episodes):
@@ -161,6 +161,10 @@ def _evaluate(
             action = agent.get_optimal_actions(np.array([s]))[0]
             s, r, done, _, _ = env.step(action)
             total_ep_reward += r
+
+            if display:
+                env.render()
+
             if done:
                 break
 
@@ -234,3 +238,26 @@ def train_dqn_agent(
             plt.title('eps = {:e}, mean reward = {:.1f}'.format(agent.epsilon, np.mean(mean_reward_history[-10:])))
             plt.plot(mean_reward_history)
             plt.pause(0.05)
+
+
+def dqn_training_wrapper(
+        env_factory: Callable[[int], gym.Env],
+        agent: DQNAgent,
+        dqn_config: configparser.SectionProxy
+):
+    train_dqn_agent(
+        env_factory=env_factory,
+        agent=agent,
+        opt=torch.optim.NAdam(agent.parameters(), lr=dqn_config.getfloat("learning_rate")),
+        epsilon_decay=LinearDecay(
+            start_value=dqn_config.getfloat("init_epsilon"),
+            final_value=dqn_config.getfloat("final_epsilon"),
+            max_steps=dqn_config.getint("decay_steps")
+        ),
+        max_steps=dqn_config.getint("total_steps"),
+        timesteps_per_epoch=dqn_config.getint("timesteps_per_epoch"),
+        batch_size=dqn_config.getint("batch_size"),
+        update_target_net_freq=dqn_config.getint("refresh_target_network_freq"),
+        evaluation_freq=dqn_config.getint("eval_freq"),
+        replay_buffer_size=dqn_config.getint("replay_buffer_size")
+    )
