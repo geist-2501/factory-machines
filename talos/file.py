@@ -1,6 +1,4 @@
-import io
-import json
-from typing import List
+from typing import List, Any
 from dataclasses import dataclass
 
 import torch
@@ -12,28 +10,28 @@ class TalFile:
     iters_trained: int
     record_freq: int
     recorded_rewards: List[float]
+    agent_data: Any
 
     def write(self, path: str):
         with open(path, 'wb') as file:
-            test = torch.zeros((2, 2))
             torch.save({
                 "id": self.id,
                 "iters_trained": self.iters_trained,
                 "record_freq": self.record_freq,
                 "recorded_rewards": self.recorded_rewards,
-                "agent_data": test
+                "agent_data": self.agent_data
             }, file)
 
 
 def read_talfile(path: str) -> TalFile:
     with open(path, 'rb') as file:
-        test = torch.load(file)
-        print(test)
+        data = torch.load(file)
+        return TalFile(**data)
 
 
 if __name__ == '__main__':
-    to_write_talfile = TalFile("DQN", 1234, 20, [1, 2, 3, 4])
+    to_write_talfile = TalFile("DQN", 1234, 20, [1, 2, 3, 4], torch.zeros((2, 2)))
     to_write_talfile.write("test.tal")
 
-    read_talfile("test.tal")
+    print(read_talfile("test.tal"))
 
