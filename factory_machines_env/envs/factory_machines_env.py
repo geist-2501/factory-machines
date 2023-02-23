@@ -7,51 +7,71 @@ import numpy as np
 from gym.core import RenderFrame, ActType, ObsType
 
 
+def _get_map_info(m: List[str]) -> Tuple[Tuple[int, int], List[Tuple[int, int]], int, int]:
+    output_loc = None
+    depot_locs = []
+    for y in range(len(m)):
+        for x in range(len(m[y])):
+            cell = m[y][x]
+            if cell == 'o':
+                # Get output loc.
+                output_loc = (x, y)
+            elif cell == 'd':
+                # Get depot locs.
+                depot_locs.append((x, y))
+
+    len_y = len(m)
+    len_x = len(m[0])
+
+    return output_loc, depot_locs, len_x, len_y
+
+
 class FactoryMachinesEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
+    maps = {
+        1: [
+            '.......',
+            '.....1.',
+            '.o...2.',
+            '.....3.',
+            '.......',
+        ],
+        2: [
+            '.......',
+            '...w.d.',
+            '.o.w.d.',
+            '...w.d.',
+            '.......',
+        ]
+    }
 
-    def __init__(self, render_mode: Optional[str] = None, size=5, recipe_complexity=3) -> None:
-        self.size = size  # The size of the square grid.
-        self.window_size = 512  # The size of the PyGame window.
-        self.window_header = 100  # The size of the information header.
-        self.recipe_complexity = recipe_complexity
+    def __init__(self, render_mode: Optional[str] = None, map=1) -> None:
+        self._map = self.maps[map]
 
-        self.res_out = 0
-        self.res_steel = 1
-        self.res_wood = 2
+        output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
 
-        self._piles = np.zeros((3, 2), dtype=int)
-        self._piles[self.res_out] = [0, 0]
-        self._piles[self.res_steel] = [0, size - 1]
-        self._piles[self.res_wood] = [size - 1, 0]
+        self._output_loc = output_loc
+        self._depot_locs = depot_locs
 
-        self._pile_colours = [(0, 0, 0)] * 3
-        self._pile_colours[self.res_out] = (80, 130, 250)
-        self._pile_colours[self.res_wood] = (70, 50, 0)
-        self._pile_colours[self.res_steel] = (168, 168, 168)
+        self._len_x = len_x
+        self._len_y = len_y
 
-        self._required = {
-            self.res_steel: 0,
-            self.res_wood: 0
-        }
-
-        self._carrying = 0  # O - nothing, 1 - steel, 2 - wood.
-
-        self._agent = np.array([])
+        self._agent_loc = np.array(output_loc)
+        self._agent_inv = np.array([] * len(depot_locs))
+        self._depot_queues = np.array([] * len(depot_locs))
 
         self.observation_space = spaces.Dict(
             {
-                "out_pile": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "steel_pile": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "wood_pile": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "req_wood": spaces.Discrete(recipe_complexity),
-                "req_steel": spaces.Discrete(recipe_complexity),
-                "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "carrying": spaces.Discrete(3)
+                "agent_loc": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(2,), dtype=int),
+                "agent_obs": spaces.Box(0, 1, shape=(3, 3), dtype=int),
+                "agent_inv": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
+                "depot_locs": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(len(self._depot_locs), 2), dtype=int),
+                "depot_queues": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
+                "output_loc": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(2,), dtype=int),
             }
         )
 
-        self.action_space = spaces.Discrete(6)  # Up, down, left, right, grab, drop.
+        self.action_space = spaces.Discrete(6)  # Up, down, left, right, grab.
 
         # Utility vectors for moving the agent.
         self._action_to_direction = {
@@ -69,25 +89,31 @@ class FactoryMachinesEnv(gym.Env):
         self.clock = None
 
     def _get_obs(self):
+
+        local_obs = np.zeros((3, 3))
+        for x in range(-1, 2):
+            for y in range(-1, 2):
+                offset_x = self._agent_loc[0] + x
+                offset_y = self._agent_loc[1] + y
+                if self._is_oob(offset_x, offset_y):
+                    local_obs[x, y] = 1
+
         return {
-            "agent": self._agent,
-            "carrying": self._carrying,
-            "out_pile": self._piles[self.res_out],
-            "steel_pile": self._piles[self.res_steel],
-            "wood_pile": self._piles[self.res_wood],
-            "req_steel": self._required[self.res_steel],
-            "req_wood": self._required[self.res_wood],
+            "agent_loc": self._agent_loc,
+            "agent_obs": local_obs,
+            "agent_inv": self._agent_inv,
+            "depot_locs": self._depot_locs,
+            "depot_queues": self._depot_queues,
+            "output_loc": self._output_loc,
         }
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
         super().reset(seed=seed, options=options)
 
-        self._agent = self.np_random.integers(0, self.size, size=2, dtype=int)
+        self._agent_loc = self._output_loc
 
-        self._required[self.res_wood] = self.np_random.integers(1, self.recipe_complexity, endpoint=True, dtype=int)
-        self._required[self.res_steel] = self.np_random.integers(0, self.recipe_complexity, endpoint=True, dtype=int)
-
-        self._carrying = 0
+        self._agent_inv = np.array([] * len(self._depot_locs))
+        self._depot_queues = np.array([] * len(self._depot_locs))
 
         obs = self._get_obs()
 
@@ -98,15 +124,11 @@ class FactoryMachinesEnv(gym.Env):
         if action < 4:
             # Action is a move op.
             direction = self._action_to_direction[action]
-            new_pos = self._agent + direction
-            self._agent = np.clip(new_pos, 0, self.size - 1)
+            new_pos = self._agent_loc + direction
+            self._agent_loc = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
         elif action == 4:
             # Action is a grab op.
             if self._try_grab() is False:
-                illegal_move_punishment = 5
-        elif action == 5:
-            # Action is a drop op.
-            if self._try_drop() is False:
                 illegal_move_punishment = 5
 
         terminated = sum(self._required.values()) == 0
@@ -228,3 +250,7 @@ class FactoryMachinesEnv(gym.Env):
             return True
 
         return False
+
+
+    def _is_oob(self, x: int, y: int):
+        return x < 0 or x >= self._len_x or y < 0 or y >= self._len_y
