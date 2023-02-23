@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 import gym
 import torch
@@ -110,6 +110,25 @@ def train(
             agent.save(path)
         except OSError as ex:
             print("[bold red]Saving failed![/] " + ex.strerror)
+
+
+@app.command()
+def compare(
+        opt_agents: List[str] = typer.Option(
+            ["DQN.tal"],
+            "--agent",
+            "-a",
+            prompt="Enter the .tal files for the agents you'd like to compare"
+        ),
+        opt_env: str = typer.Option(
+            "CartPole-v1",
+            "--env",
+            "-e",
+            prompt="Environment to evaluate in?"
+        ),
+):
+    for agent in opt_agents:
+        print(f" > {agent} [green]loaded![/]")
 
 
 @app.command()
