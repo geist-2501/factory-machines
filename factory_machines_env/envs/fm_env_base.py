@@ -17,10 +17,10 @@ def _get_map_info(m: List[str]) -> Tuple[np.ndarray, List[np.ndarray], int, int]
             cell = m[y][x]
             if cell == 'o':
                 # Get output loc.
-                output_loc = np.array([x, y])
+                output_loc = np.array([x, y], dtype=int)
             elif cell == 'd':
                 # Get depot locs.
-                depot_locs.append(np.array([x, y]))
+                depot_locs.append(np.array([x, y], dtype=int))
 
     return output_loc, depot_locs, len_x, len_y
 
@@ -75,10 +75,10 @@ class FactoryMachinesEnvBase(gym.Env):
 
         # Utility vectors for moving the agent.
         self._action_to_direction = {
-            0: np.array([0, -1]),  # w 0, -1
-            1: np.array([-1, 0]),  # a -1, 0
-            2: np.array([0, 1]),  # s 0, 1
-            3: np.array([1, 0]),  # d 1, 0
+            0: np.array([0, -1], dtype=int),  # w 0, -1
+            1: np.array([-1, 0], dtype=int),  # a -1, 0
+            2: np.array([0, 1], dtype=int),  # s 0, 1
+            3: np.array([1, 0], dtype=int),  # d 1, 0
         }
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
