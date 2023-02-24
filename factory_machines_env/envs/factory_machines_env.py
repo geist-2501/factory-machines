@@ -1,39 +1,39 @@
 from typing import Optional, Union, List, Tuple
 
 import gym
-from gym import spaces
-import pygame
 import numpy as np
+import pygame
+from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
+from numpy.random import default_rng
 
 
-def _get_map_info(m: List[str]) -> Tuple[Tuple[int, int], List[Tuple[int, int]], int, int]:
+def _get_map_info(m: List[str]) -> Tuple[np.ndarray, List[np.ndarray], int, int]:
     output_loc = None
     depot_locs = []
-    for y in range(len(m)):
-        for x in range(len(m[y])):
+    len_y = len(m)
+    len_x = len(m[0])
+    for y in range(len_y):
+        for x in range(len_x):
             cell = m[y][x]
             if cell == 'o':
                 # Get output loc.
-                output_loc = (x, y)
+                output_loc = np.array([x, y])
             elif cell == 'd':
                 # Get depot locs.
-                depot_locs.append((x, y))
-
-    len_y = len(m)
-    len_x = len(m[0])
+                depot_locs.append(np.array([x, y]))
 
     return output_loc, depot_locs, len_x, len_y
 
 
 class FactoryMachinesEnv(gym.Env):
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
+    metadata = {"render_modes": ["rgb_array"], "render_fps": 4}
     maps = {
         1: [
             '.......',
-            '.....1.',
-            '.o...2.',
-            '.....3.',
+            '.....d.',
+            '.o...d.',
+            '.....d.',
             '.......',
         ],
         2: [
@@ -45,29 +45,32 @@ class FactoryMachinesEnv(gym.Env):
         ]
     }
 
-    def __init__(self, render_mode: Optional[str] = None, map=1) -> None:
-        self._map = self.maps[map]
+    def __init__(self, render_mode: Optional[str] = None, map_id=1, num_orders=1) -> None:
+        self._map = self.maps[map_id]
+        self._total_num_orders = num_orders
+        self._current_num_orders = num_orders
 
         output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
 
         self._output_loc = output_loc
         self._depot_locs = depot_locs
+        self._num_depots = len(depot_locs)
 
         self._len_x = len_x
         self._len_y = len_y
 
         self._agent_loc = np.array(output_loc)
-        self._agent_inv = np.array([] * len(depot_locs))
-        self._depot_queues = np.array([] * len(depot_locs))
+        self._agent_inv = np.zeros(self._num_depots)
+        self._depot_queues = np.zeros(self._num_depots)
 
         self.observation_space = spaces.Dict(
             {
                 "agent_loc": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(2,), dtype=int),
                 "agent_obs": spaces.Box(0, 1, shape=(3, 3), dtype=int),
                 "agent_inv": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
-                "depot_locs": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(len(self._depot_locs), 2), dtype=int),
+                "depot_locs": spaces.Box(0, max(len_x, len_y), shape=(len(self._depot_locs), 2), dtype=int),
                 "depot_queues": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
-                "output_loc": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(2,), dtype=int),
+                "output_loc": spaces.Box(0, max(len_x, len_y), shape=(2,), dtype=int),
             }
         )
 
@@ -85,7 +88,7 @@ class FactoryMachinesEnv(gym.Env):
         self.render_mode = render_mode
 
         # Used for human friendly rendering.
-        self.window = None
+        self.screen = None
         self.clock = None
 
     def _get_obs(self):
@@ -112,15 +115,18 @@ class FactoryMachinesEnv(gym.Env):
 
         self._agent_loc = self._output_loc
 
-        self._agent_inv = np.array([] * len(self._depot_locs))
-        self._depot_queues = np.array([] * len(self._depot_locs))
+        self._agent_inv = np.zeros(self._num_depots)
+        self._depot_queues = np.zeros(self._num_depots)
+        self._current_num_orders = self._total_num_orders
 
         obs = self._get_obs()
 
         return obs, {}
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
-        illegal_move_punishment = 0
+
+        # Process actions.
+        grab_reward = 0
         if action < 4:
             # Action is a move op.
             direction = self._action_to_direction[action]
@@ -128,14 +134,29 @@ class FactoryMachinesEnv(gym.Env):
             self._agent_loc = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
         elif action == 4:
             # Action is a grab op.
-            if self._try_grab() is False:
-                illegal_move_punishment = 5
+            grab_reward = self._try_grab()
 
-        terminated = sum(self._required.values()) == 0
+        # Process orders.
+        should_create_order = bool(np.random.binomial(1, 0.1))
+        if should_create_order:
+            order = np.zeros(self._num_depots)
+            while sum(order) == 0:
+                order = (np.random.normal(size=self._num_depots) > 0.5).astype(int)
+            self._depot_queues += order
+
+        # Check depot drop off.
+        drop_off_reward = 0
+        if np.array_equal(self._agent_loc, self._output_loc):
+            agent_inv_inverse = 1 - self._agent_inv
+            drop_off_reward = sum(self._depot_queues * self._agent_inv)
+            self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
+            self._agent_inv = np.zeros(self._num_depots)
+
+        terminated = self._current_num_orders == 0 and sum(self._depot_queues) == 0
 
         reward = 100 if terminated else 0
-        reward -= illegal_move_punishment
-        reward -= 0.05
+        reward += grab_reward
+        reward += drop_off_reward
 
         obs = self._get_obs()
         info = {}
@@ -143,79 +164,75 @@ class FactoryMachinesEnv(gym.Env):
         return obs, reward, terminated, False, info
 
     def render(self) -> Optional[Union[RenderFrame, List[RenderFrame]]]:
-        return self._render_human()
+        len_x = self._len_x
+        len_y = self._len_y
+        cell_size = 64
+        spacing = 8
 
-    def _render_human(self):
-        if self.window is None and self.render_mode == "human":
-            pygame.init()
-            pygame.display.set_caption("Factory Machines")
-            pygame.display.init()
-            self.window = pygame.display.set_mode((self.window_size, self.window_size))
-        if self.clock is None and self.render_mode == "human":
+        header_size = cell_size * 2
+        header_origin = (spacing, cell_size * len_y + spacing)
+
+        screen_width, screen_height = cell_size * len_x, cell_size * len_y + header_size + spacing * 2
+
+        black = (0, 0, 0)
+
+        pygame.init()
+        if self.screen is None:
+            self.screen = pygame.Surface((screen_width, screen_height))
+
+        if self.clock is None:
             self.clock = pygame.time.Clock()
 
-        canvas = pygame.Surface((self.window_size, self.window_size))
-        canvas.fill((255, 255, 255))
-        pix_square_size = (
-                self.window_size / self.size
-        )  # The size of a single grid square in pixels
+        font = pygame.font.Font(None, screen_height // 15)
 
-        # Draw resource piles.
-        resources = [self.res_out, self.res_steel, self.res_wood]
-        for res in resources:
-            pygame.draw.rect(
-                canvas,
-                self._pile_colours[res],
-                pygame.Rect(
-                    pix_square_size * self._piles[res],
-                    (pix_square_size, pix_square_size),
-                ),
-            )
+        self.screen.fill((255, 255, 255))
+
+        # Draw depots
+        output_text = font.render("O", True, black)
+        self.screen.blit(output_text, self._output_loc * cell_size)
+        for depot_num, depot_loc in enumerate(self._depot_locs):
+            depot_text = font.render("D" + str(depot_num), True, black)
+            self.screen.blit(depot_text, depot_loc * cell_size)
 
         # Draw agent.
         pygame.draw.circle(
-            canvas,
+            self.screen,
             (0, 0, 255),
-            (self._agent + 0.5) * pix_square_size,
-            pix_square_size / 3,
+            (self._agent_loc + 0.5) * cell_size,
+            cell_size / 3,
         )
 
         # Add gridlines
-        for x in range(self.size + 1):
+        for x in range(len_x + 1):
             pygame.draw.line(
-                canvas,
+                self.screen,
                 0,
-                (0, pix_square_size * x),
-                (self.window_size, pix_square_size * x),
-                width=3,
-            )
-            pygame.draw.line(
-                canvas,
-                0,
-                (pix_square_size * x, 0),
-                (pix_square_size * x, self.window_size),
+                (cell_size * x, 0),
+                (cell_size * x, len_y * cell_size),
                 width=3,
             )
 
-        if self.render_mode == "human":
-            # The following line copies our drawings from `canvas` to the visible window
-            self.window.blit(canvas, canvas.get_rect())
-            pygame.event.pump()
-            pygame.display.update()
-
-            # We need to ensure that human-rendering occurs at the predefined framerate.
-            # The following line will automatically add a delay to keep the framerate stable.
-            self.clock.tick(self.metadata["render_fps"])
-        else:  # rgb_array
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
+        for y in range(len_y + 1):
+            pygame.draw.line(
+                self.screen,
+                0,
+                (0, cell_size * y),
+                (len_x * cell_size, cell_size * y),
+                width=3,
             )
 
-    def _render_ansi(self):
-        pass
+        inv_text = font.render("INV: " + str(self._agent_inv), True, black)
+        inv_text_rect = self.screen.blit(inv_text, header_origin)
+
+        depot_text = font.render("DEP: " + str(self._depot_queues), True, black)
+        self.screen.blit(depot_text, (header_origin[0], inv_text_rect.bottom + spacing))
+
+        return np.transpose(
+            np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
+        )
 
     def close(self):
-        if self.window is not None:
+        if self.screen is not None:
             pygame.display.quit()
             pygame.quit()
 
@@ -226,31 +243,25 @@ class FactoryMachinesEnv(gym.Env):
             's': 2,
             'd': 3,
             'g': 4,
-            't': 5,
         }
 
-    def _try_grab(self) -> bool:
-        if self._carrying != 0:
-            return False
+    def _try_grab(self) -> int:
+        """Try and add the current depot resource to the agent inventory.
+        Returns reward if agent needed the resource, punishment if not."""
+        for depot_num, depot_loc in enumerate(self._depot_locs):
+            if not np.array_equal(self._agent_loc, depot_loc):
+                continue
 
-        valid_res = [self.res_wood, self.res_steel]
-        for res in valid_res:
-            if np.array_equal(self._agent, self._piles[res]):
-                # Successfully grabbed a resource.
-                self._carrying = res
-                return True
+            # Agent is on a depot.
+            if self._agent_inv[depot_num] != 0:
+                # Agent is already holding material, administer punishment.
+                return -1
+            elif self._depot_queues[depot_num]:
+                # Agent picks up resource,
+                self._agent_inv[depot_num] = 1
+                return 0
 
-        return False
-
-    def _try_drop(self) -> bool:
-        if self._carrying != 0 and \
-                np.array_equal(self._agent, self._piles[self.res_out]):
-            self._required[self._carrying] = max(self._required[self._carrying] - 1, 0)
-            self._carrying = 0
-            return True
-
-        return False
-
+        return 0
 
     def _is_oob(self, x: int, y: int):
         return x < 0 or x >= self._len_x or y < 0 or y >= self._len_y

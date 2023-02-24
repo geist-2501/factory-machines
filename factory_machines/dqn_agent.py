@@ -150,8 +150,7 @@ def _evaluate(
         env: gym.Env,
         agent: DQNAgent,
         n_episodes=1,
-        max_episode_steps=10000,
-        display=False
+        max_episode_steps=10000
 ):
     mean_ep_rewards = []
     for _ in range(n_episodes):
@@ -161,9 +160,6 @@ def _evaluate(
             action = agent.get_optimal_actions(np.array([s]))[0]
             s, r, done, _, _ = env.step(action)
             total_ep_reward += r
-
-            if display:
-                env.render()
 
             if done:
                 break

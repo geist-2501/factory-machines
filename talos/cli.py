@@ -4,6 +4,7 @@ import gym
 import torch
 import typer
 from rich import print
+from gym.utils.play import play as gym_play
 from talos.registration import get_agent, registry
 from talos.config import app as config_app, load_config
 from talos.error import *
@@ -152,13 +153,17 @@ def play(
             prompt="Path to serialised agent weights?"
         )
 ):
-    env_factory = _create_env_factory(opt_env)
-    agent, training_wrapper = _create_agent(env_factory, opt_agent, opt_weights)
+    env_factory = _create_env_factory(opt_env, render_mode='rgb_array')
 
-    try:
-        play_agent(agent, env_factory(0))
-    except KeyboardInterrupt:
-        raise typer.Abort()
+    if opt_agent == "me":
+        env = env_factory()
+        gym_play(env)
+    else:
+        agent, _ = _create_agent(env_factory, opt_agent, opt_weights)
+        try:
+            play_agent(agent, env_factory(0))
+        except KeyboardInterrupt:
+            raise typer.Abort()
 
 
 def _get_device():
@@ -196,9 +201,9 @@ def _create_agent(env_factory, opt_agent, opt_weights):
     return agent, training_wrapper
 
 
-def _create_env_factory(env_name=None):
-    def env_factory(seed: int):
-        env = gym.make(env_name, render_mode='human').unwrapped
+def _create_env_factory(env_name=None, render_mode=None):
+    def env_factory(seed: int = None):
+        env = gym.make(env_name, render_mode=render_mode).unwrapped
         if seed is not None:
             env.reset(seed=seed)
         return env
