@@ -1,1 +1,2 @@
-from factory_machines_env.envs.factory_machines_env import FactoryMachinesEnv
+from factory_machines_env.envs.fm_env_multi import FactoryMachinesEnvMulti
+from factory_machines_env.envs.fm_env_single import FactoryMachinesEnvSingle

@@ -5,7 +5,6 @@ import numpy as np
 import pygame
 from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
-from numpy.random import default_rng
 
 
 def _get_map_info(m: List[str]) -> Tuple[np.ndarray, List[np.ndarray], int, int]:
@@ -26,7 +25,7 @@ def _get_map_info(m: List[str]) -> Tuple[np.ndarray, List[np.ndarray], int, int]
     return output_loc, depot_locs, len_x, len_y
 
 
-class FactoryMachinesEnv(gym.Env):
+class FactoryMachinesEnvBase(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 4}
     maps = {
         1: [
@@ -45,10 +44,8 @@ class FactoryMachinesEnv(gym.Env):
         ]
     }
 
-    def __init__(self, render_mode: Optional[str] = None, map_id=1, num_orders=1) -> None:
+    def __init__(self, render_mode: Optional[str] = None, map_id=1) -> None:
         self._map = self.maps[map_id]
-        self._total_num_orders = num_orders
-        self._current_num_orders = num_orders
 
         output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
 
@@ -59,9 +56,9 @@ class FactoryMachinesEnv(gym.Env):
         self._len_x = len_x
         self._len_y = len_y
 
-        self._agent_loc = np.array(output_loc)
-        self._agent_inv = np.zeros(self._num_depots)
-        self._depot_queues = np.zeros(self._num_depots)
+        self._agent_loc = np.array(output_loc, dtype=int)
+        self._agent_inv = np.zeros(self._num_depots, dtype=int)
+        self._depot_queues = np.zeros(self._num_depots, dtype=int)
 
         self.observation_space = spaces.Dict(
             {
@@ -115,9 +112,8 @@ class FactoryMachinesEnv(gym.Env):
 
         self._agent_loc = self._output_loc
 
-        self._agent_inv = np.zeros(self._num_depots)
-        self._depot_queues = np.zeros(self._num_depots)
-        self._current_num_orders = self._total_num_orders
+        self._agent_inv = np.zeros(self._num_depots, dtype=int)
+        self._depot_queues = np.zeros(self._num_depots, dtype=int)
 
         obs = self._get_obs()
 
@@ -136,14 +132,6 @@ class FactoryMachinesEnv(gym.Env):
             # Action is a grab op.
             grab_reward = self._try_grab()
 
-        # Process orders.
-        should_create_order = bool(np.random.binomial(1, 0.1))
-        if should_create_order:
-            order = np.zeros(self._num_depots)
-            while sum(order) == 0:
-                order = (np.random.normal(size=self._num_depots) > 0.5).astype(int)
-            self._depot_queues += order
-
         # Check depot drop off.
         drop_off_reward = 0
         if np.array_equal(self._agent_loc, self._output_loc):
@@ -152,16 +140,12 @@ class FactoryMachinesEnv(gym.Env):
             self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
             self._agent_inv = np.zeros(self._num_depots)
 
-        terminated = self._current_num_orders == 0 and sum(self._depot_queues) == 0
-
-        reward = 100 if terminated else 0
-        reward += grab_reward
-        reward += drop_off_reward
+        reward = grab_reward + drop_off_reward
 
         obs = self._get_obs()
         info = {}
 
-        return obs, reward, terminated, False, info
+        return obs, reward, False, False, info
 
     def render(self) -> Optional[Union[RenderFrame, List[RenderFrame]]]:
         len_x = self._len_x
