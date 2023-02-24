@@ -28,19 +28,16 @@ class DQN(nn.Module):
 
 
 class DQNAgent(Agent):
-    def __init__(self, state_shape, n_actions, epsilon=0, gamma=0.99, device='cpu'):
+    def __init__(self, obs_size, n_actions, epsilon=0, gamma=0.99, device='cpu'):
         super().__init__()
         self.epsilon = epsilon
         self.gamma = gamma
         self.n_actions = n_actions
-        self.state_shape = state_shape
         self.device = device
-        assert len(state_shape) == 1
-        state_dim = state_shape[0]
 
         # Init both networks.
-        self.net = DQN(state_dim, n_actions).to(device)
-        self.target_net = DQN(state_dim, n_actions).to(device)
+        self.net = DQN(obs_size, n_actions).to(device)
+        self.target_net = DQN(obs_size, n_actions).to(device)
         self.target_net.load_state_dict(self.net.state_dict())
 
     def forward(self, state):

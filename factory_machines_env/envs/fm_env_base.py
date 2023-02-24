@@ -7,7 +7,7 @@ from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
 
 
-def _get_map_info(m: List[str]) -> Tuple[np.ndarray, List[np.ndarray], int, int]:
+def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
     output_loc = None
     depot_locs = []
     len_y = len(m)
@@ -22,7 +22,7 @@ def _get_map_info(m: List[str]) -> Tuple[np.ndarray, List[np.ndarray], int, int]
                 # Get depot locs.
                 depot_locs.append(np.array([x, y], dtype=int))
 
-    return output_loc, depot_locs, len_x, len_y
+    return output_loc, np.array(depot_locs), len_x, len_y
 
 
 class FactoryMachinesEnvBase(gym.Env):
