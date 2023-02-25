@@ -1,5 +1,5 @@
 import configparser
-from typing import Callable
+from typing import Callable, Dict
 
 import gym
 import torch
@@ -114,13 +114,12 @@ class DQNAgent(Agent):
     def parameters(self):
         return self.net.parameters()
 
-    def save(self, path: str):
-        torch.save(self.net.state_dict(), path)
+    def save(self) -> Dict:
+        return self.net.state_dict()
 
-    def load(self, path: str):
-        state_dict = torch.load(path, map_location=self.device)
-        self.net.load_state_dict(state_dict)
-        self.target_net.load_state_dict(state_dict)
+    def load(self, agent_data: Dict):
+        self.net.load_state_dict(agent_data)
+        self.target_net.load_state_dict(agent_data)
 
 
 def _play_into_buffer(

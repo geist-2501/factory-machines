@@ -5,10 +5,11 @@ import torch
 import typer
 from rich import print
 from gym.utils.play import play as gym_play
-from talos.registration import get_agent, registry
+from talos.registration import get_agent, agent_registry, get_wrapper, wrapper_registry
 from talos.config import app as config_app, load_config
 from talos.error import *
 from talos.agent import play_agent
+from talos.file import TalFile, read_talfile
 
 app = typer.Typer()
 app.add_typer(config_app, name="config")
@@ -113,13 +114,15 @@ def train(
     try:
         training_wrapper(env_factory, agent, agent_config)
     except KeyboardInterrupt:
-        print("[bold red]Training interrupted[/bold red]")
+        print("[bold red]Training interrupted[/bold red].")
 
     if typer.confirm("Save agent to disk?"):
         try:
             path = typer.prompt("Enter a path to save to")
             print(f"Saving agent to disk ([italic]{path}[/]) ...")
-            agent.save(path)
+            data = agent.save()
+            talfile = TalFile(opt_agent, 0, 0, [], data)
+            talfile.write(path)
         except OSError as ex:
             print("[bold red]Saving failed![/] " + ex.strerror)
 
@@ -145,11 +148,11 @@ def compare(
 
 @app.command()
 def play(
-        opt_agent: str = typer.Option(
-            "DQN",
-            "--agent",
-            "-a",
-            prompt="Agent you want to play?"
+        opt_agent_talfile: str = typer.Option(
+            "DQN.tal",
+            "--talfile",
+            "-t",
+            prompt="Location of the agent's talfile?"
         ),
         opt_wrapper: str = typer.Option(
             None,
@@ -162,22 +165,27 @@ def play(
             "-e",
             prompt="Environment to play in?"
         ),
-        opt_weights: str = typer.Option(
+        opt_seed: int = typer.Option(
             None,
-            "--weights",
-            "-w",
-            prompt="Path to serialised agent weights?"
+            "--seed",
+            "-s"
         )
 ):
-    env_factory = _create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array')
+    try:
+        talfile = read_talfile(opt_agent_talfile)
+    except TalfileLoadError as ex:
+        print(f"Couldn't load talfile {opt_agent_talfile}")
+        raise typer.Abort()
 
-    if opt_agent == "me":
-        env = env_factory()
+    if opt_agent_talfile == "me":
+        env_factory = _create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array')
+        env = env_factory(opt_seed)
         gym_play(env)
     else:
-        agent, _ = _create_agent(env_factory, opt_agent, opt_weights)
+        env_factory = _create_env_factory(opt_env, opt_wrapper, render_mode='human')
+        agent, _ = _create_agent(env_factory, talfile.id, talfile.agent_data)
         try:
-            play_agent(agent, env_factory(0))
+            play_agent(agent, env_factory(opt_seed))
         except KeyboardInterrupt:
             raise typer.Abort()
 

@@ -2,6 +2,7 @@ from typing import List, Any
 from dataclasses import dataclass
 
 import torch
+from talos.error import TalfileLoadError
 
 
 @dataclass()
@@ -25,7 +26,11 @@ class TalFile:
 
 def read_talfile(path: str) -> TalFile:
     with open(path, 'rb') as file:
-        data = torch.load(file)
+        try:
+            data = torch.load(file)
+        except RuntimeError as ex:
+            raise TalfileLoadError(ex)
+
         return TalFile(**data)
 
 
