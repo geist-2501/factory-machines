@@ -4,6 +4,7 @@ import gym
 import torch
 import typer
 from rich import print
+from gym.utils.play import play as gym_play
 from talos.registration import get_agent, registry
 from talos.config import app as config_app, load_config
 from talos.error import *
@@ -48,11 +49,17 @@ def main(
 
 
 @app.command("list")
-def list_agents():
-    """List all registered agents."""
+def list_all():
+    """List all registered agents and wrappers."""
     print("[bold]Currently registered agents[/]:")
-    for agent in registry.keys():
-        print(agent)
+    for agent in agent_registry.keys():
+        print(" " + agent)
+    print("\n[bold]Currently registered wrappers[/]:")
+    for wrapper in wrapper_registry.keys():
+        print(" " + wrapper)
+    print("\n[bold]Currently registered environments[/]:")
+    for env in gym.envs.registry.keys():
+        print(" " + env)
 
 
 @app.command()
@@ -68,6 +75,11 @@ def train(
             "--config",
             "-c",
             prompt="Configuration to use?"
+        ),
+        opt_wrapper: str = typer.Option(
+            None,
+            "--wrapper",
+            "-r"
         ),
         opt_env: str = typer.Option(
             "CartPole-v1",
@@ -88,7 +100,7 @@ def train(
     if not config:
         raise typer.Abort()
 
-    env_factory = _create_env_factory(opt_env)
+    env_factory = _create_env_factory(opt_env, opt_wrapper)
     agent, training_wrapper = _create_agent(env_factory, opt_agent, opt_weights)
 
     agent_config = config[opt_agent]
@@ -139,6 +151,11 @@ def play(
             "-a",
             prompt="Agent you want to play?"
         ),
+        opt_wrapper: str = typer.Option(
+            None,
+            "--wrapper",
+            "-w"
+        ),
         opt_env: str = typer.Option(
             "CartPole-v1",
             "--env",
@@ -152,13 +169,17 @@ def play(
             prompt="Path to serialised agent weights?"
         )
 ):
-    env_factory = _create_env_factory(opt_env)
-    agent, training_wrapper = _create_agent(env_factory, opt_agent, opt_weights)
+    env_factory = _create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array')
 
-    try:
-        play_agent(agent, env_factory(0))
-    except KeyboardInterrupt:
-        raise typer.Abort()
+    if opt_agent == "me":
+        env = env_factory()
+        gym_play(env)
+    else:
+        agent, _ = _create_agent(env_factory, opt_agent, opt_weights)
+        try:
+            play_agent(agent, env_factory(0))
+        except KeyboardInterrupt:
+            raise typer.Abort()
 
 
 def _get_device():
@@ -187,8 +208,9 @@ def _create_agent(env_factory, opt_agent, opt_weights):
 
     device = _get_device()
     env = env_factory(0)
+    state, _ = env.reset()
     agent = agent_factory(
-        env.observation_space.shape,
+        len(state),
         env.action_space.n,
         device
     )
@@ -196,11 +218,17 @@ def _create_agent(env_factory, opt_agent, opt_weights):
     return agent, training_wrapper
 
 
-def _create_env_factory(env_name=None):
-    def env_factory(seed: int):
-        env = gym.make(env_name, render_mode='human').unwrapped
+def _create_env_factory(env_name, wrapper_name=None, render_mode=None):
+    def env_factory(seed: int = None):
+        env = gym.make(env_name, render_mode=render_mode).unwrapped
+
         if seed is not None:
             env.reset(seed=seed)
+
+        if wrapper_name is not None:
+            wrapper_factory = get_wrapper(wrapper_name)
+            env = wrapper_factory(env)
+
         return env
 
     return env_factory

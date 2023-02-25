@@ -1,5 +1,4 @@
 import gym
-import numpy as np
 
 
 class FactoryMachinesFlattenWrapper(gym.ObservationWrapper):
@@ -7,12 +6,11 @@ class FactoryMachinesFlattenWrapper(gym.ObservationWrapper):
     Turns the dict observation from the FactoryMachinesEnv into an ndarray.
     """
     def observation(self, observation):
-        return (
-            *observation["out_pile"],
-            *observation["steel_pile"],
-            *observation["wood_pile"],
-            observation["req_wood"],
-            observation["req_steel"],
-            *observation["agent"],
-            observation["carrying"],
-        )
+        return [
+            *observation["agent_loc"],
+            *observation["agent_obs"].flatten(),
+            *observation["agent_inv"],
+            *observation["depot_locs"].flatten(),
+            *observation["depot_queues"],
+            *observation["output_loc"],
+        ]
