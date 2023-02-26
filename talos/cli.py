@@ -210,7 +210,8 @@ def play(
         gym_play(env)
     else:
         env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human')
-        agent, _ = create_agent(env_factory, talfile.id, talfile.agent_data)
+        agent, _ = create_agent(env_factory, talfile.id)
+        agent.load(talfile.agent_data)
         try:
             play_agent(agent, env_factory(opt_seed))
         except KeyboardInterrupt:

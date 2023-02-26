@@ -16,11 +16,11 @@ class DQN(nn.Module):
     def __init__(self, state_dim: int, n_actions: int) -> None:
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim, 150),
+            nn.Linear(state_dim, 64),
             nn.ReLU(),
-            nn.Linear(150, 100),
+            nn.Linear(64, 64),
             nn.ReLU(),
-            nn.Linear(100, n_actions)
+            nn.Linear(64, n_actions)
         )
 
     def forward(self, states):
