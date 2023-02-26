@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Callable
+from typing import Dict, Callable, Tuple
 
 import gym
 
@@ -46,7 +46,7 @@ def register_agent(
 
 def get_agent(
         id: str
-) -> tuple[Callable, Callable]:
+) -> Tuple[Callable, Callable]:
     global agent_registry
 
     if id in agent_registry:

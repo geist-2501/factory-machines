@@ -198,17 +198,17 @@ def play(
             "-s"
         )
 ):
-    try:
-        talfile = read_talfile(opt_agent_talfile)
-    except TalfileLoadError as ex:
-        print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
-        raise typer.Abort()
-
     if opt_agent_talfile == "me":
         env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array')
         env = env_factory(opt_seed)
         gym_play(env)
     else:
+        try:
+            talfile = read_talfile(opt_agent_talfile)
+        except TalfileLoadError as ex:
+            print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
+            raise typer.Abort()
+
         env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human')
         agent, _ = create_agent(env_factory, talfile.id)
         agent.load(talfile.agent_data)

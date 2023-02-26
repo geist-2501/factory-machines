@@ -25,13 +25,12 @@ class TalFile:
 
 
 def read_talfile(path: str) -> TalFile:
-    with open(path, 'rb') as file:
-        try:
+    try:
+        with open(path, 'rb') as file:
             data = torch.load(file)
-        except RuntimeError as ex:
-            raise TalfileLoadError(ex)
-
-        return TalFile(**data)
+            return TalFile(**data)
+    except OSError as ex:
+        raise TalfileLoadError(ex)
 
 
 if __name__ == '__main__':
