@@ -1,14 +1,13 @@
 from typing import Optional, List
 
 import gym
-import torch
 import typer
 from rich import print
 from gym.utils.play import play as gym_play
-from talos.registration import get_agent, agent_registry, get_wrapper, wrapper_registry
-from talos.config import app as config_app, load_config
+from talos.registration import agent_registry, wrapper_registry
+from talos.config import app as config_app
 from talos.error import *
-from talos.agent import play_agent
+from talos.core import play_agent, evaluate_agents, load_config, create_env_factory, get_device, create_agent
 from talos.file import TalFile, read_talfile
 
 app = typer.Typer()
@@ -87,22 +86,24 @@ def train(
             "--env",
             "-e",
             prompt="Environment to train in?"
-        ),
-        opt_weights: str = typer.Option(
-            None,
-            "--weights",
-            "-w"
         )
 ) -> None:
     """Train an agent on a given environment."""
 
+    device = get_device()
+    print(f"Using device [bold white]{device}.[/]")
+
     # Load config.
-    config = load_config(opt_config)
-    if not config:
+    try:
+        print(f"Loading config `{opt_config}`... ", end="")
+        config = load_config(opt_config)
+        print("[bold green]success![/]")
+    except ConfigNotFound:
+        print("[bold green]failure![/]")
         raise typer.Abort()
 
-    env_factory = _create_env_factory(opt_env, opt_wrapper)
-    agent, training_wrapper = _create_agent(env_factory, opt_agent, opt_weights)
+    env_factory = create_env_factory(opt_env, opt_wrapper)
+    agent, training_wrapper = create_agent(env_factory, opt_agent, device=device)
 
     agent_config = config[opt_agent]
     print(f"\nProceeding to train a {opt_agent} on {opt_env} with config values:")
@@ -129,10 +130,10 @@ def train(
 
 @app.command()
 def compare(
-        opt_agents: List[str] = typer.Option(
+        opt_agent_talfiles: List[str] = typer.Option(
             ["DQN.tal"],
-            "--agent",
-            "-a",
+            "--talfile",
+            "-t",
             prompt="Enter the .tal files for the agents you'd like to compare"
         ),
         opt_env: str = typer.Option(
@@ -141,9 +142,35 @@ def compare(
             "-e",
             prompt="Environment to evaluate in?"
         ),
+        opt_wrapper: str = typer.Option(
+            None,
+            "--wrapper",
+            "-w"
+        ),
 ):
-    for agent in opt_agents:
-        print(f" > {agent} [green]loaded![/]")
+    env_factory = create_env_factory(opt_env, opt_wrapper)
+
+    agents = []
+    for agent_talfile in opt_agent_talfiles:
+        print(f" > {agent_talfile}... ", end="")
+        try:
+            talfile = read_talfile(agent_talfile)
+            agent, _ = create_agent(env_factory, talfile.id)
+            agent.load(talfile.agent_data)
+            agents.append(agent)
+            print("[bold green]success![/]")
+        except TalfileLoadError:
+            print("[bold red]failed![/] Couldn't load .tal file.")
+        except AgentNotFound:
+            print("[bold red]failed![/] Couldn't find agent definition. Make sure it's been registered.")
+
+    if len(agents) == len(opt_agent_talfiles):
+        should_continue = typer.confirm("All agents loaded, ready to proceed?", default=True)
+    else:
+        should_continue = typer.confirm("Only some agents loaded, ready to proceed?", default=False)
+
+    if should_continue:
+        evaluate_agents(agents, opt_agent_talfiles, env_factory)
 
 
 @app.command()
@@ -174,69 +201,17 @@ def play(
     try:
         talfile = read_talfile(opt_agent_talfile)
     except TalfileLoadError as ex:
-        print(f"Couldn't load talfile {opt_agent_talfile}")
+        print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
         raise typer.Abort()
 
     if opt_agent_talfile == "me":
-        env_factory = _create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array')
+        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array')
         env = env_factory(opt_seed)
         gym_play(env)
     else:
-        env_factory = _create_env_factory(opt_env, opt_wrapper, render_mode='human')
-        agent, _ = _create_agent(env_factory, talfile.id, talfile.agent_data)
+        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human')
+        agent, _ = create_agent(env_factory, talfile.id, talfile.agent_data)
         try:
             play_agent(agent, env_factory(opt_seed))
         except KeyboardInterrupt:
             raise typer.Abort()
-
-
-def _get_device():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device [bold green]{device}[/bold green]")
-    return device
-
-
-def _load_weights(agent, opt_weights):
-    if opt_weights is not None:
-        try:
-            print("\nLoading weights...")
-            agent.load(opt_weights)
-            print("...[bold green]success![/bold green]")
-        except OSError as ex:
-            print("...[bold red]failed![/bold red] " + ex.strerror)
-            typer.confirm("Do you want to continue?", abort=True)
-
-
-def _create_agent(env_factory, opt_agent, opt_weights):
-    try:
-        agent_factory, training_wrapper = get_agent(opt_agent)
-    except AgentNotFound:
-        print(f"[bold red]Couldn't find agent {opt_agent}[/]")
-        raise typer.Abort()
-
-    device = _get_device()
-    env = env_factory(0)
-    state, _ = env.reset()
-    agent = agent_factory(
-        len(state),
-        env.action_space.n,
-        device
-    )
-    _load_weights(agent, opt_weights)
-    return agent, training_wrapper
-
-
-def _create_env_factory(env_name, wrapper_name=None, render_mode=None):
-    def env_factory(seed: int = None):
-        env = gym.make(env_name, render_mode=render_mode).unwrapped
-
-        if seed is not None:
-            env.reset(seed=seed)
-
-        if wrapper_name is not None:
-            wrapper_factory = get_wrapper(wrapper_name)
-            env = wrapper_factory(env)
-
-        return env
-
-    return env_factory

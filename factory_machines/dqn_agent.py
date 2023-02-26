@@ -29,7 +29,7 @@ class DQN(nn.Module):
 
 class DQNAgent(Agent):
     def __init__(self, obs_size, n_actions, epsilon=0, gamma=0.99, device='cpu'):
-        super().__init__()
+        super().__init__("DQN")
         self.epsilon = epsilon
         self.gamma = gamma
         self.n_actions = n_actions
