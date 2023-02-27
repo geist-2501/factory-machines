@@ -5,8 +5,7 @@ import gym
 import torch
 import torch.nn as nn
 import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import trange
+from tqdm import trange, tqdm
 from factory_machines.utils import LinearDecay
 from factory_machines.replay_buffer import ReplayBuffer
 from talos import Agent
@@ -224,12 +223,9 @@ def train_dqn_agent(
             agent.update_target_net()
 
         if step % evaluation_freq == 0:
-            mean_reward_history.append(_evaluate(
-                env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
-            )
-            plt.title('eps = {:e}, mean reward = {:.1f}'.format(agent.epsilon, np.mean(mean_reward_history[-10:])))
-            plt.plot(mean_reward_history)
-            plt.pause(0.05)
+            score = _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
+            mean_reward_history.append(score)
+            tqdm.write(f"iter: {step}\teps: {agent.epsilon}\tscore: {score}")
 
 
 def dqn_training_wrapper(
