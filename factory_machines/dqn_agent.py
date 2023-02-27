@@ -4,6 +4,7 @@ from typing import Callable, Dict
 import gym
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from tqdm import trange, tqdm
 from factory_machines.utils import LinearDecay
@@ -58,9 +59,9 @@ class DQNAgent(Agent):
         rewards = torch.tensor(rewards, device=self.device, dtype=torch.float32)
         next_states = torch.tensor(next_states, device=self.device, dtype=torch.float)
         is_done = torch.tensor(
-            is_done.astype('uint8'),
+            is_done.astype('bool'),
             device=self.device,
-            dtype=torch.uint8,
+            dtype=torch.bool,
         )
 
         # get q-values for all actions in current states
@@ -82,7 +83,7 @@ class DQNAgent(Agent):
         target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
 
         # mean squared error loss to minimize
-        loss = torch.mean((predicted_qvalues_for_actions - target_qvalues_for_actions.detach()) ** 2)
+        loss = F.mse_loss(target_qvalues_for_actions, predicted_qvalues_for_actions)
 
         return loss
 
@@ -189,7 +190,8 @@ def train_dqn_agent(
         batch_size=30,
         update_target_net_freq=100,
         evaluation_freq=1000,
-        replay_buffer_size=10**4
+        replay_buffer_size=10**4,
+        max_grad_norm=5000
 ):
     env = env_factory(0)
     state, _ = env.reset()
@@ -215,6 +217,7 @@ def train_dqn_agent(
         loss = agent.compute_loss(s, a, r, s_dash, is_done)
 
         loss.backward()
+        grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
         opt.step()
         opt.zero_grad()
 
@@ -225,7 +228,7 @@ def train_dqn_agent(
         if step % evaluation_freq == 0:
             score = _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
             mean_reward_history.append(score)
-            tqdm.write(f"iter: {step}\teps: {agent.epsilon}\tscore: {score}")
+            tqdm.write(f"iter: {step}\teps: {agent.epsilon}\tscore: {score}\t grad:{grad_norm}")
 
 
 def dqn_training_wrapper(
