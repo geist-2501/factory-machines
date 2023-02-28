@@ -1,3 +1,5 @@
+from scipy.ndimage.filters import uniform_filter1d
+
 
 class LinearDecay:
     def __init__(self, start_value, final_value, max_steps):
@@ -10,3 +12,7 @@ class LinearDecay:
         upper = self.start_value * (self.max_steps - step)
         lower = self.final_value * step
         return (upper + lower) / self.max_steps
+
+
+def smoothen(data):
+    return uniform_filter1d(data, size=30)

@@ -6,8 +6,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from tqdm import trange, tqdm
-from factory_machines.utils import LinearDecay
+import matplotlib.pyplot as plt
+from tqdm import trange
+from factory_machines.utils import LinearDecay, smoothen
 from factory_machines.replay_buffer import ReplayBuffer
 from talos import Agent
 
@@ -101,7 +102,10 @@ class DQNAgent(Agent):
     def _get_actions(self, states: np.ndarray, epsilon: float):
         """Pick actions according to an epsilon greedy strategy."""
         states = torch.tensor(states, device=self.device, dtype=torch.float32)
-        qvalues = self.forward(states)
+        self.net.eval()
+        with torch.no_grad():
+            qvalues = self.forward(states)
+        self.net.train()
 
         batch_size, n_actions = qvalues.shape
 
@@ -122,6 +126,9 @@ class DQNAgent(Agent):
         self.target_net.load_state_dict(agent_data)
 
 
+num_episodes_ran = 0
+
+
 def _play_into_buffer(
         env: gym.Env,
         agent: DQNAgent,
@@ -137,7 +144,7 @@ def _play_into_buffer(
         buffer.add(s, action, r, sp1, done)
         s = sp1
         if done:
-            env.reset()
+            s, _ = env.reset()
 
     return s
 
@@ -190,6 +197,7 @@ def train_dqn_agent(
         batch_size=30,
         update_target_net_freq=100,
         evaluation_freq=1000,
+        gather_freq=20,
         replay_buffer_size=10**4,
         max_grad_norm=5000
 ):
@@ -198,6 +206,7 @@ def train_dqn_agent(
 
     # Create buffer and fill it with experiences.
     buffer = ReplayBuffer(replay_buffer_size)
+    agent.epsilon = 1
     for _ in range(100):
         state = _play_into_buffer(env, agent, buffer, state, n_steps=10**2)
         if len(buffer) >= replay_buffer_size:
@@ -205,7 +214,11 @@ def train_dqn_agent(
 
     state, _ = env.reset()
 
+    fig, axs = plt.subplots(1, 3, figsize=(12, 6))
+
     mean_reward_history = []
+    loss_history = []
+    grad_norm_history = []
     for step in trange(0, max_steps):
 
         agent.epsilon = epsilon_decay.get(step)
@@ -225,10 +238,32 @@ def train_dqn_agent(
             # Load agent weights into target_network
             agent.update_target_net()
 
+        if step % gather_freq == 0:
+            # Gather info.
+            loss_history.append(loss.data.cpu().numpy())
+            grad_norm_history.append(grad_norm.data.cpu().numpy())
+
         if step % evaluation_freq == 0:
-            score = _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
-            mean_reward_history.append(score)
-            tqdm.write(f"iter: {step}\teps: {agent.epsilon}\tscore: {score}\t grad:{grad_norm}")
+            mean_reward_history.append(
+                _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
+            )
+
+            axs[0].cla()
+            axs[1].cla()
+            axs[2].cla()
+
+            axs[0].set_title("Mean Reward")
+            axs[1].set_title("Loss")
+            axs[2].set_title("Grad Norm")
+
+            axs[0].plot(mean_reward_history)
+            axs[1].plot(smoothen(loss_history))
+            axs[2].plot(smoothen(grad_norm_history))
+
+            plt.pause(0.05)
+
+            # tqdm.write(f"iter: {step}\teps: {agent.epsilon}\tscore: {score}\t loss: {loss}")
+
 
 
 def dqn_training_wrapper(
