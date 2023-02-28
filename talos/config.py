@@ -1,6 +1,5 @@
 import typer
 import configparser
-from rich import print
 
 app = typer.Typer()
 
