@@ -265,7 +265,6 @@ def train_dqn_agent(
             # tqdm.write(f"iter: {step}\teps: {agent.epsilon}\tscore: {score}\t loss: {loss}")
 
 
-
 def dqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
