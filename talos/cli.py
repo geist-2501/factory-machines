@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import gym
 import typer
@@ -32,6 +32,18 @@ def _version_callback(value: bool) -> None:
   RL agent training assistant""")
         print(f"[bold green]  v{__version__}[/]")
         raise typer.Exit()
+
+
+def _convert_to_key_value_list(args: List[str]) -> Dict[str, str]:
+
+    key_values = {}
+    for arg in args:
+        parts = arg.split('=')
+        assert len(parts) == 2
+        key, value = parts
+        key_values[key] = value
+
+    return key_values
 
 
 @app.callback()
@@ -79,16 +91,21 @@ def train(
         opt_wrapper: str = typer.Option(
             None,
             "--wrapper",
-            "-r"
+            "-w"
         ),
         opt_env: str = typer.Option(
             "CartPole-v1",
             "--env",
             "-e",
             prompt="Environment to train in?"
+        ),
+        opt_env_args: List[str] = typer.Option(
+            [],
+            "--env-arg",
         )
 ) -> None:
     """Train an agent on a given environment."""
+    opt_env_args = _convert_to_key_value_list(opt_env_args)
 
     device = get_device()
     print(f"Using device [bold white]{device}.[/]")
@@ -102,7 +119,7 @@ def train(
         print("[bold green]failure![/]")
         raise typer.Abort()
 
-    env_factory = create_env_factory(opt_env, opt_wrapper)
+    env_factory = create_env_factory(opt_env, opt_wrapper, env_args=opt_env_args)
     agent, training_wrapper = create_agent(env_factory, opt_agent, device=device)
 
     agent_config = config[opt_agent]
@@ -196,10 +213,16 @@ def play(
             None,
             "--seed",
             "-s"
+        ),
+        opt_env_args: List[str] = typer.Option(
+            [],
+            "--env-arg",
         )
 ):
+    opt_env_args = _convert_to_key_value_list(opt_env_args)
+
     if opt_agent_talfile == "me":
-        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array')
+        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array', env_args=opt_env_args)
         env = env_factory(opt_seed)
         gym_play(env)
     else:
@@ -209,7 +232,7 @@ def play(
             print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
             raise typer.Abort()
 
-        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human')
+        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human', env_args=opt_env_args)
         agent, _ = create_agent(env_factory, talfile.id)
         agent.load(talfile.agent_data)
         try:

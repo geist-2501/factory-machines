@@ -54,7 +54,7 @@ class FactoryMachinesEnvBase(gym.Env):
         ]
     }
 
-    def __init__(self, render_mode: Optional[str] = None, map_id=0) -> None:
+    def __init__(self, render_mode: Optional[str] = None, map_id: str = "1") -> None:
         self._map = self.maps[map_id]
 
         output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
@@ -146,7 +146,7 @@ class FactoryMachinesEnvBase(gym.Env):
         drop_off_reward = 0
         if np.array_equal(self._agent_loc, self._output_loc):
             agent_inv_inverse = 1 - self._agent_inv
-            drop_off_reward = sum(self._depot_queues * self._agent_inv)
+            drop_off_reward = sum(self._depot_queues * self._agent_inv) * 10
             self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
             self._agent_inv = np.zeros(self._num_depots, dtype=int)
 
@@ -263,9 +263,9 @@ class FactoryMachinesEnvBase(gym.Env):
                 # Agent is already holding material, administer punishment.
                 return -1
             elif self._depot_queues[depot_num]:
-                # Agent picks up resource,
+                # Agent picks up a needed resource,
                 self._agent_inv[depot_num] = 1
-                return 1
+                return 5
 
         return 0
 

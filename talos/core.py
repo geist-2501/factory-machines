@@ -92,9 +92,12 @@ def create_agent(env_factory, agent_name, device: str = get_device()):
     return agent, training_wrapper
 
 
-def create_env_factory(env_name, wrapper_name=None, render_mode=None):
+def create_env_factory(env_name, wrapper_name=None, render_mode=None, env_args=None):
+    if env_args is None:
+        env_args = {}
+
     def env_factory(seed: int = None):
-        env = gym.make(env_name, render_mode=render_mode).unwrapped
+        env = gym.make(env_name, render_mode=render_mode, **env_args).unwrapped
 
         if seed is not None:
             env.reset(seed=seed)

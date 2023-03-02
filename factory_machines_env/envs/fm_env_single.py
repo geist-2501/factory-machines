@@ -19,7 +19,7 @@ class FactoryMachinesEnvSingle(FactoryMachinesEnvBase):
         obs, reward, _, _, info = super().step(action)
 
         terminated = sum(self._depot_queues) == 0
-        reward += 100 if terminated else 0
+        reward += 50 if terminated else 0
 
         return obs, reward, terminated, False, info
 
