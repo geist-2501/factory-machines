@@ -26,16 +26,26 @@ def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
 
 
 class FactoryMachinesEnvBase(gym.Env):
-    metadata = {"render_modes": ["rgb_array"], "render_fps": 4}
+    metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 4}
     maps = {
-        1: [
+        "0": [
+            'o.d',
+            '...',
+            'd..',
+        ],
+        "0-1": [
+            'o..',
+            '...',
+            'ddd',
+        ],
+        "1": [
             '.......',
             '.....d.',
             '.o...d.',
             '.....d.',
             '.......',
         ],
-        2: [
+        "2": [
             '.......',
             '...w.d.',
             '.o.w.d.',
@@ -44,7 +54,7 @@ class FactoryMachinesEnvBase(gym.Env):
         ]
     }
 
-    def __init__(self, render_mode: Optional[str] = None, map_id=1) -> None:
+    def __init__(self, render_mode: Optional[str] = None, map_id=0) -> None:
         self._map = self.maps[map_id]
 
         output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
@@ -140,10 +150,13 @@ class FactoryMachinesEnvBase(gym.Env):
             self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
             self._agent_inv = np.zeros(self._num_depots, dtype=int)
 
-        reward = grab_reward + drop_off_reward
+        reward = grab_reward + drop_off_reward - 0.1
 
         obs = self._get_obs()
         info = {}
+
+        if self.render_mode == "human":
+            self.render()
 
         return obs, reward, False, False, info
 
@@ -162,7 +175,11 @@ class FactoryMachinesEnvBase(gym.Env):
 
         pygame.init()
         if self.screen is None:
-            self.screen = pygame.Surface((screen_width, screen_height))
+            if self.render_mode == "human":
+                pygame.display.init()
+                self.screen = pygame.display.set_mode((screen_width, screen_height))
+            else:
+                self.screen = pygame.Surface((screen_width, screen_height))
 
         if self.clock is None:
             self.clock = pygame.time.Clock()
@@ -211,9 +228,14 @@ class FactoryMachinesEnvBase(gym.Env):
         depot_text = font.render("DEP: " + str(self._depot_queues), True, black)
         self.screen.blit(depot_text, (header_origin[0], inv_text_rect.bottom + spacing))
 
-        return np.transpose(
-            np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
-        )
+        if self.render_mode == "human":
+            pygame.event.pump()
+            pygame.display.update()
+            self.clock.tick(self.metadata["render_fps"])
+        else:
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
+            )
 
     def close(self):
         if self.screen is not None:
@@ -243,7 +265,7 @@ class FactoryMachinesEnvBase(gym.Env):
             elif self._depot_queues[depot_num]:
                 # Agent picks up resource,
                 self._agent_inv[depot_num] = 1
-                return 0
+                return 1
 
         return 0
 

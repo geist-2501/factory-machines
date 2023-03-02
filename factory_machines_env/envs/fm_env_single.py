@@ -7,7 +7,7 @@ from factory_machines_env.envs.fm_env_base import FactoryMachinesEnvBase
 
 class FactoryMachinesEnvSingle(FactoryMachinesEnvBase):
 
-    def __init__(self, render_mode: Optional[str] = None, map_id=1) -> None:
+    def __init__(self, render_mode: Optional[str] = None, map_id="0") -> None:
         super().__init__(render_mode, map_id)
 
         order = np.zeros(self._num_depots)
