@@ -214,7 +214,10 @@ def train_dqn_agent(
 
     state, _ = env.reset()
 
-    fig, axs = plt.subplots(1, 3, figsize=(12, 6))
+    if can_graph():
+        fig, axs = plt.subplots(1, 3, figsize=(12, 6))
+    else:
+        fig, axs = None, None
 
     mean_reward_history = []
     loss_history = []
