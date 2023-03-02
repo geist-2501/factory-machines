@@ -138,7 +138,7 @@ class FactoryMachinesEnvBase(gym.Env):
             agent_inv_inverse = 1 - self._agent_inv
             drop_off_reward = sum(self._depot_queues * self._agent_inv)
             self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
-            self._agent_inv = np.zeros(self._num_depots)
+            self._agent_inv = np.zeros(self._num_depots, dtype=int)
 
         reward = grab_reward + drop_off_reward
 
