@@ -1,4 +1,4 @@
-from typing import Dict, Callable
+from typing import Dict, Callable, Tuple, Any
 from operator import itemgetter
 
 import gym
@@ -26,7 +26,13 @@ class HDQNAgent(Agent):
         self.device = device
         self.gamma = gamma
 
+        self.eps1 = 1
+        self.eps2 = np.ones(n_goals)
+
         self.n_goals = n_goals
+
+        self.d1 = ReplayBuffer(10**4)
+        self.d2 = ReplayBuffer(10**4)
 
         self.meta_cont_net = DQN(obs_size, n_goals).to(device)  # Meta-controller net / Q2.
         self.meta_cont_net_fixed = DQN(obs_size, n_goals).to(device)  # Meta-controller fixed net.
@@ -80,8 +86,46 @@ class HDQNAgent(Agent):
 
         return loss
 
-    def get_action(self, state):
-        pass
+    def get_action(self, state: np.ndarray, extra_state=None) -> Tuple[int, Any]:
+        """Get the optimal action given a state."""
+        goal = extra_state
+        meta_controller_obs = np.expand_dims(state, axis=0)
+        if goal is None:
+            goal = self.get_epsilon(meta_controller_obs, 0, self.meta_cont_net)[0]
+
+        controller_obs = np.append(meta_controller_obs, goal)
+        action = self.get_epsilon(controller_obs, epsilon=0, net=self.cont_net)[0]
+
+        return action, goal
+
+    def get_epsilon_action(self, states: np.ndarray):
+        return self.get_epsilon(states, self.)
+
+    def get_epsilon(self, states: np.ndarray, epsilon: float, net: DQN):
+        states = torch.tensor(states, device=self.device, dtype=torch.float32)
+        net.eval()
+        with torch.no_grad():
+            qvalues = net(states)
+        net.train()
+
+        if len(states.shape) == 1:
+            # Single version:
+            n_actions = qvalues.shape[0]
+            should_explore = np.random.choice([0, 1], p=[1 - epsilon, epsilon])
+            if should_explore:
+                return np.random.choice(n_actions)
+            else:
+                qvalues.argmax().cpu()
+
+        elif len(states.shape) == 2:
+            # Batch version
+            batch_size, n_actions = qvalues.shape
+
+            random_actions = np.random.choice(n_actions, size=batch_size)
+            best_actions = qvalues.argmax(axis=-1).cpu()
+
+            should_explore = np.random.choice([0, 1], batch_size, p=[1 - epsilon, epsilon])
+            return np.where(should_explore, random_actions, best_actions)
 
     def save(self) -> Dict:
         return {
@@ -99,6 +143,15 @@ class HDQNAgent(Agent):
         self.cont_net_fixed.load_state_dict(cont_data)
 
 
+def _play_into_buffers(
+        env: gym.Env,
+        agent: HDQNAgent,
+        state,
+        n_steps=1
+):
+    s = state
+    g = agent._get_epsilon(s, agent.eps1)
+
 def train_h_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
@@ -111,8 +164,8 @@ def train_h_dqn_agent(
     agent.epsilon2 = np.ones(agent.n_goals)
 
     # Init D1 & D2.
-    d1 = ReplayBuffer(replay_buffer_size)
-    d2 = ReplayBuffer(replay_buffer_size)
+    while len(agent.d1) < replay_buffer_size and len(agent.d2) < replay_buffer_size:
+        action = agent.forward(state, record=True)
 
     for ep in range(num_episodes):
         goal = agent.get_goal()

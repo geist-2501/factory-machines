@@ -1,5 +1,5 @@
 import configparser
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple, Any
 
 import gym
 import torch
@@ -88,8 +88,8 @@ class DQNAgent(Agent):
 
         return loss
 
-    def get_action(self, state):
-        return self.get_optimal_actions(np.array([state]))[0]
+    def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
+        return self.get_optimal_actions(np.array([state]))[0], extra_state
 
     def get_epsilon_actions(self, states: np.ndarray):
         """Pick actions according to an epsilon greedy strategy."""
@@ -124,9 +124,6 @@ class DQNAgent(Agent):
     def load(self, agent_data: Dict):
         self.net.load_state_dict(agent_data)
         self.target_net.load_state_dict(agent_data)
-
-
-num_episodes_ran = 0
 
 
 def _play_into_buffer(
