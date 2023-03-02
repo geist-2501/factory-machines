@@ -213,6 +213,6 @@ def play(
         agent, _ = create_agent(env_factory, talfile.id)
         agent.load(talfile.agent_data)
         try:
-            play_agent(agent, env_factory(opt_seed))
+            play_agent(agent, env_factory(opt_seed), wait_time=0.1)
         except KeyboardInterrupt:
             raise typer.Abort()

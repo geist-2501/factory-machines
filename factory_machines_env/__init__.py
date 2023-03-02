@@ -3,13 +3,13 @@ from factory_machines_env.wrappers import FactoryMachinesFlattenWrapper
 from talos import register_wrapper
 
 register(
-    id='factory_machines/FactoryMachinesMulti-v0',
+    id='FactoryMachinesMulti-v0',
     entry_point='factory_machines_env.envs:FactoryMachinesEnvMulti',
     max_episode_steps=300,
 )
 
 register(
-    id='factory_machines/FactoryMachinesSingle-v0',
+    id='FactoryMachinesSingle-v0',
     entry_point='factory_machines_env.envs:FactoryMachinesEnvSingle',
     max_episode_steps=300,
 )

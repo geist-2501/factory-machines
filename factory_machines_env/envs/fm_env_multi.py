@@ -8,7 +8,7 @@ from factory_machines_env.envs.fm_env_base import FactoryMachinesEnvBase
 
 class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
-    def __init__(self, render_mode: Optional[str] = None, map_id=1, num_orders=1) -> None:
+    def __init__(self, render_mode: Optional[str] = None, map_id=0, num_orders=1) -> None:
         super().__init__(render_mode, map_id)
 
         self._total_num_orders = num_orders
