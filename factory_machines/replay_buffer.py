@@ -22,7 +22,9 @@ class ReplayBuffer(object):
 
     def add(self, obs_t, action, reward, obs_tp1, done):
         data = (obs_t, action, reward, obs_tp1, done)
+        self._add(data)
 
+    def _add(self, data):
         if self._next_idx >= len(self._storage):
             self._storage.append(data)
         else:
@@ -72,3 +74,29 @@ class ReplayBuffer(object):
             for _ in range(batch_size)
         ]
         return self._encode_sample(idxes)
+
+
+class ReplayBufferWithGoals(ReplayBuffer):
+    def add_with_goal(self, obs, goal, action, reward, next_obs, done):
+        data = (obs, goal, action, reward, next_obs, done)
+        self._add(data)
+
+    def _encode_sample(self, idxes):
+        observations, actions, goals, rewards, next_observations, dones = [], [], [], [], [], []
+        for i in idxes:
+            data = self._storage[i]
+            obs, goal, action, reward, next_obs, done = data
+            observations.append(np.array(obs, copy=False))
+            goals.append(goal)
+            actions.append(np.array(action, copy=False))
+            rewards.append(reward)
+            next_observations.append(np.array(next_obs, copy=False))
+            dones.append(done)
+        return (
+            np.array(observations),
+            np.array(goals),
+            np.array(actions),
+            np.array(rewards),
+            np.array(next_observations),
+            np.array(dones)
+        )

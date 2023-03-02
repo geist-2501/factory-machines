@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from factory_machines.dqn_agent import DQN
-from factory_machines.replay_buffer import ReplayBuffer
+from factory_machines.replay_buffer import ReplayBuffer, ReplayBufferWithGoals
 from talos import Agent
 
 
@@ -26,22 +26,18 @@ class HDQNAgent(Agent):
         self.device = device
         self.gamma = gamma
 
-        self.eps1 = 1
-        self.eps2 = np.ones(n_goals)
+        self.eps1 = np.ones(n_goals)
+        self.eps2 = 1
 
         self.n_goals = n_goals
 
-        self.d1 = ReplayBuffer(10**4)
+        self.d1 = ReplayBufferWithGoals(10**4)
         self.d2 = ReplayBuffer(10**4)
 
         self.meta_cont_net = DQN(obs_size, n_goals).to(device)  # Meta-controller net / Q2.
         self.meta_cont_net_fixed = DQN(obs_size, n_goals).to(device)  # Meta-controller fixed net.
         self.cont_net = DQN(n_goals, n_actions).to(device)  # Controller net / Q1.
         self.cont_net_fixed = DQN(n_goals, n_actions).to(device)  # Controller fixed net.
-
-    def forward(self, state):
-        # TODO this is non-trivial.
-        pass
 
     def compute_td_loss(
             self,
@@ -86,6 +82,13 @@ class HDQNAgent(Agent):
 
         return loss
 
+    def get_intrinsic_reward(self, obs: np.ndarray,  action: int, next_obs: np.ndarray, goal: int) -> float:
+        return 0.1  # TODO implement.
+
+    def goal_satisfied(self, obs: np.ndarray, goal: int) -> bool:
+        # TODO implement.
+        return np.random.choice([True, False])
+
     def get_action(self, state: np.ndarray, extra_state=None) -> Tuple[int, Any]:
         """Get the optimal action given a state."""
         goal = extra_state
@@ -98,8 +101,34 @@ class HDQNAgent(Agent):
 
         return action, goal
 
-    def get_epsilon_action(self, states: np.ndarray):
-        return self.get_epsilon(states, self.)
+    def get_epsilon_action(self, obs: np.ndarray, goal: int):
+        """Get an action from the controller, using the epsilon greedy policy."""
+        # TODO Encode controller state.
+        controller_obs = np.concatenate(obs, goal)
+        return self.get_epsilon(controller_obs, self.eps1[goal], self.cont_net)
+
+    def get_epsilon_goal(self, obs: np.ndarray):
+        """Get a goal from the meta-controller, using the epsilon greedy policy."""
+        return self.get_epsilon(obs, self.eps2, self.meta_cont_net)
+
+    def update_net(
+            self,
+            net: DQN,
+            net_fixed: DQN,
+            buffer: ReplayBuffer,
+            batch_size,
+            opt,
+            max_grad_norm
+    ):
+
+        (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
+
+        loss = self.compute_td_loss(s, a, r, s_dash, is_done, net, net_fixed)
+
+        loss.backward()
+        nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
+        opt.step()
+        opt.zero_grad()
 
     def get_epsilon(self, states: np.ndarray, epsilon: float, net: DQN):
         states = torch.tensor(states, device=self.device, dtype=torch.float32)
@@ -146,26 +175,119 @@ class HDQNAgent(Agent):
 def _play_into_buffers(
         env: gym.Env,
         agent: HDQNAgent,
-        state,
+        initial_state,
         n_steps=1
 ):
-    s = state
-    g = agent._get_epsilon(s, agent.eps1)
+    s = initial_state
+    g = None
+    meta_s = None
+    meta_r = 0
+    for _ in range(n_steps):
+        if g is None:
+            # Start step for the meta controller.
+            g = agent.get_epsilon_goal(s)
+            # Take note of the start state, so we can store it in the buffer later.
+            meta_s = s
+            meta_r = 0
+
+        # get action from controller.
+        a = agent.get_epsilon_action(s, g)
+        next_s, ext_r, done, _, _ = env.step(a)
+        int_r = agent.get_intrinsic_reward(s, a, next_s, g)
+        meta_r += ext_r
+
+        # TODO encode state and goal together.
+        agent.d1.add_with_goal(s, g, a, int_r, next_s, done)
+
+        if agent.goal_satisfied(s, g):
+            # End of the meta-action.
+            agent.d2.add(meta_s, g, ext_r, next_s, done)
+            g = None
+
+        s = next_s
+
+        if done:
+            s, _ = env.reset()
+            g = None
+            meta_s = None
+
+    return s
+
 
 def train_h_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
         opt: torch.optim.Optimizer,
         num_episodes: int = 100,
-        replay_buffer_size=10**4
+        max_timestep=1000,
+        replay_buffer_size=10**4,
+        batch_size=32,
+        max_grad_norm=1000
 ):
+    """Train the hDQN agent following the algorithm outlined by Kulkarni et al. 2016."""
     # Init all epsilons.
-    agent.epsilon1 = 1
-    agent.epsilon2 = np.ones(agent.n_goals)
+    agent.epsilon1 = np.ones(agent.n_goals)
+    agent.epsilon2 = 1
+
+    env = env_factory(0)
+    s, _ = env.reset()
 
     # Init D1 & D2.
     while len(agent.d1) < replay_buffer_size and len(agent.d2) < replay_buffer_size:
-        action = agent.forward(state, record=True)
+        s = _play_into_buffers(env, agent, initial_state=s, n_steps=replay_buffer_size)
 
     for ep in range(num_episodes):
-        goal = agent.get_goal()
+        s, _ = env.reset()
+        g = agent.get_epsilon_goal(s)
+        meta_r = 0
+        meta_s = None
+        for step in range(max_timestep):
+            if g is None:
+                # Start step for the meta controller.
+                g = agent.get_epsilon_goal(s)
+                # Take note of the start state, so we can store it in the buffer later.
+                meta_s = s
+                meta_r = 0
+
+            # get action from controller.
+            a = agent.get_epsilon_action(s, g)
+            next_s, ext_r, done, _, _ = env.step(a)
+            int_r = agent.get_intrinsic_reward(s, a, next_s, g)
+            meta_r += ext_r
+
+            # TODO encode state and goal together.
+            agent.d1.add_with_goal(s, g, a, int_r, next_s, done)
+
+            # Update nets.
+            agent.update_net(
+                net=agent.cont_net,
+                net_fixed=agent.cont_net_fixed,
+                buffer=agent.d1,
+                opt=opt,
+                batch_size=batch_size,
+                max_grad_norm=max_grad_norm
+            )
+            agent.update_net(
+                net=agent.meta_cont_net,
+                net_fixed=agent.meta_cont_net_fixed,
+                buffer=agent.d2,
+                opt=opt,
+                batch_size=batch_size,
+                max_grad_norm=max_grad_norm
+            )
+
+            # TODO update fixed nets.
+
+            if agent.goal_satisfied(s, g):
+                # End of the meta-action.
+                agent.d2.add(meta_s, g, ext_r, next_s, done)
+                g = None
+
+            s = next_s
+
+            if done:
+                break
+
+        # TODO Anneal epsilons.
+
+
