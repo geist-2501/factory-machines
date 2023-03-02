@@ -7,8 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm import trange
-from factory_machines.utils import LinearDecay, smoothen
+from tqdm import trange, tqdm
+from factory_machines.utils import LinearDecay, smoothen, can_graph
 from factory_machines.replay_buffer import ReplayBuffer
 from talos import Agent
 
@@ -244,26 +244,33 @@ def train_dqn_agent(
             grad_norm_history.append(grad_norm.data.cpu().numpy())
 
         if step % evaluation_freq == 0:
+            score = _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
             mean_reward_history.append(
-                _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
+                score
             )
 
-            axs[0].cla()
-            axs[1].cla()
-            axs[2].cla()
+            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history)
 
-            axs[0].set_title("Mean Reward")
-            axs[1].set_title("Loss")
-            axs[2].set_title("Grad Norm")
+            tqdm.write(f"iter: {step: 10.0f} eps: {agent.epsilon: 10.1f}\tscore: {score: 10.2f}\t loss: {loss: 10.2f}")
 
-            axs[0].plot(mean_reward_history)
-            axs[1].plot(smoothen(loss_history))
-            axs[2].plot(smoothen(grad_norm_history))
 
-            plt.pause(0.05)
+def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
+    if can_graph() is False:
+        return
 
-            # tqdm.write(f"iter: {step}\teps: {agent.epsilon}\tscore: {score}\t loss: {loss}")
+    axs[0].cla()
+    axs[1].cla()
+    axs[2].cla()
 
+    axs[0].set_title("Mean Reward")
+    axs[1].set_title("Loss")
+    axs[2].set_title("Grad Norm")
+
+    axs[0].plot(mean_reward_history)
+    axs[1].plot(smoothen(loss_history))
+    axs[2].plot(smoothen(grad_norm_history))
+
+    plt.pause(0.05)
 
 
 def dqn_training_wrapper(
