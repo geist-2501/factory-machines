@@ -102,6 +102,10 @@ def train(
         opt_env_args: List[str] = typer.Option(
             [],
             "--env-arg",
+        ),
+        opt_autosave: Optional[str] = typer.Option(
+            None,
+            "--autosave-path"
         )
 ) -> None:
     """Train an agent on a given environment."""
@@ -134,9 +138,12 @@ def train(
     except KeyboardInterrupt:
         print("[bold red]Training interrupted[/bold red].")
 
-    if typer.confirm("Save agent to disk?"):
+    if opt_autosave or typer.confirm("Save agent to disk?"):
         try:
-            path = typer.prompt("Enter a path to save to")
+            if opt_autosave:
+                path = opt_autosave
+            else:
+                path = typer.prompt("Enter a path to save to")
             print(f"Saving agent to disk ([italic]{path}[/]) ...")
             data = agent.save()
             talfile = TalFile(opt_agent, 0, 0, [], data)

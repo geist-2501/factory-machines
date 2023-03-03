@@ -25,6 +25,10 @@ def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
     return output_loc, np.array(depot_locs), len_x, len_y
 
 
+def _format_depots(arr):
+    return ', '.join(map(lambda i: f"D{i[0]}: {i[1]}", enumerate(arr)))
+
+
 class FactoryMachinesEnvBase(gym.Env):
     metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 4}
     maps = {
@@ -52,6 +56,14 @@ class FactoryMachinesEnvBase(gym.Env):
             '...w.d.',
             '.......',
         ]
+    }
+
+    colors = {
+        'background': (255, 255, 255),
+        'foreground': (50, 50, 50),
+        'gridlines': (214, 214, 214),
+        'text': (10, 10, 10),
+        'agent': (43, 79, 255)
     }
 
     def __init__(self, render_mode: Optional[str] = None, map_id: str = "1") -> None:
@@ -132,15 +144,19 @@ class FactoryMachinesEnvBase(gym.Env):
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
 
         # Process actions.
-        grab_reward = 0
+        action_reward = 0
         if action < 4:
             # Action is a move op.
             direction = self._action_to_direction[action]
             new_pos = self._agent_loc + direction
-            self._agent_loc = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
+            new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
+            if self._map[new_pos[1]][new_pos[0]] == 'w':
+                action_reward += -1
+            else:
+                self._agent_loc = new_pos
         elif action == 4:
             # Action is a grab op.
-            grab_reward = self._try_grab()
+            action_reward = self._try_grab()
 
         # Check depot drop off.
         drop_off_reward = 0
@@ -150,7 +166,7 @@ class FactoryMachinesEnvBase(gym.Env):
             self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
             self._agent_inv = np.zeros(self._num_depots, dtype=int)
 
-        reward = grab_reward + drop_off_reward - 0.1
+        reward = action_reward + drop_off_reward - 0.1
 
         obs = self._get_obs()
         info = {}
@@ -171,8 +187,6 @@ class FactoryMachinesEnvBase(gym.Env):
 
         screen_width, screen_height = cell_size * len_x, cell_size * len_y + header_size + spacing * 2
 
-        black = (0, 0, 0)
-
         pygame.init()
         if self.screen is None:
             if self.render_mode == "human":
@@ -184,30 +198,15 @@ class FactoryMachinesEnvBase(gym.Env):
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
-        font = pygame.font.Font(None, screen_height // 15)
+        font = pygame.font.SysFont("monospace", screen_height // 25)
 
-        self.screen.fill((255, 255, 255))
-
-        # Draw depots
-        output_text = font.render("O", True, black)
-        self.screen.blit(output_text, self._output_loc * cell_size)
-        for depot_num, depot_loc in enumerate(self._depot_locs):
-            depot_text = font.render("D" + str(depot_num), True, black)
-            self.screen.blit(depot_text, depot_loc * cell_size)
-
-        # Draw agent.
-        pygame.draw.circle(
-            self.screen,
-            (0, 0, 255),
-            (self._agent_loc + 0.5) * cell_size,
-            cell_size / 3,
-        )
+        self.screen.fill(self.colors["background"])
 
         # Add gridlines
         for x in range(len_x + 1):
             pygame.draw.line(
                 self.screen,
-                0,
+                self.colors["gridlines"],
                 (cell_size * x, 0),
                 (cell_size * x, len_y * cell_size),
                 width=3,
@@ -216,16 +215,45 @@ class FactoryMachinesEnvBase(gym.Env):
         for y in range(len_y + 1):
             pygame.draw.line(
                 self.screen,
-                0,
+                self.colors["gridlines"],
                 (0, cell_size * y),
                 (len_x * cell_size, cell_size * y),
                 width=3,
             )
 
-        inv_text = font.render("INV: " + str(self._agent_inv), True, black)
+        # Draw depots
+        output_text = font.render("O", True, self.colors["text"])
+        self.screen.blit(output_text, self._output_loc * cell_size)
+        for depot_num, depot_loc in enumerate(self._depot_locs):
+            depot_text = font.render("D" + str(depot_num), True, self.colors["text"])
+            self.screen.blit(depot_text, depot_loc * cell_size)
+
+        # Draw walls.
+        for x in range(self._len_x):
+            for y in range(self._len_y):
+                if self._map[y][x] == 'w':
+                    pygame.draw.rect(
+                        self.screen,
+                        self.colors["foreground"],
+                        pygame.Rect(
+                            (x * cell_size, y * cell_size),
+                            (cell_size, cell_size)
+                        )
+                    )
+
+        # Draw agent.
+        pygame.draw.circle(
+            self.screen,
+            self.colors["agent"],
+            (self._agent_loc + 0.5) * cell_size,
+            cell_size / 3,
+        )
+
+        # Draw text.
+        inv_text = font.render("INV: " + _format_depots(self._agent_inv), True, self.colors["text"])
         inv_text_rect = self.screen.blit(inv_text, header_origin)
 
-        depot_text = font.render("DEP: " + str(self._depot_queues), True, black)
+        depot_text = font.render("DEP: " + _format_depots(self._depot_queues), True, self.colors["text"])
         self.screen.blit(depot_text, (header_origin[0], inv_text_rect.bottom + spacing))
 
         if self.render_mode == "human":
