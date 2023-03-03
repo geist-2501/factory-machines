@@ -146,7 +146,7 @@ def train(
                 path = typer.prompt("Enter a path to save to")
             print(f"Saving agent to disk ([italic]{path}[/]) ...")
             data = agent.save()
-            talfile = TalFile(opt_agent, 0, 0, [], data)
+            talfile = TalFile(opt_agent, 0, 0, [], data, opt_wrapper, opt_env)
             talfile.write(path)
         except OSError as ex:
             print("[bold red]Saving failed![/] " + ex.strerror)
@@ -211,10 +211,9 @@ def play(
             "-w"
         ),
         opt_env: str = typer.Option(
-            "CartPole-v1",
+            None,
             "--env",
             "-e",
-            prompt="Environment to play in?"
         ),
         opt_seed: int = typer.Option(
             None,
@@ -229,6 +228,8 @@ def play(
     opt_env_args = _convert_to_key_value_list(opt_env_args)
 
     if opt_agent_talfile == "me":
+        if opt_env is None:
+            opt_env = typer.prompt("Environment to play in?", default="CartPole-v1")
         env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array', env_args=opt_env_args)
         env = env_factory(opt_seed)
         gym_play(env)

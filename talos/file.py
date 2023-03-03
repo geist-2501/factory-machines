@@ -13,6 +13,9 @@ class TalFile:
     recorded_rewards: List[float]
     agent_data: Any
 
+    used_wrappers: str = None
+    env_name: str = None
+
     def write(self, path: str):
         with open(path, 'wb') as file:
             torch.save({
@@ -20,7 +23,9 @@ class TalFile:
                 "iters_trained": self.iters_trained,
                 "record_freq": self.record_freq,
                 "recorded_rewards": self.recorded_rewards,
-                "agent_data": self.agent_data
+                "agent_data": self.agent_data,
+                "used_wrappers": self.used_wrappers,
+                "env_name": self.env_name
             }, file)
 
 
@@ -31,11 +36,3 @@ def read_talfile(path: str) -> TalFile:
             return TalFile(**data)
     except OSError as ex:
         raise TalfileLoadError(ex)
-
-
-if __name__ == '__main__':
-    to_write_talfile = TalFile("DQN", 1234, 20, [1, 2, 3, 4], torch.zeros((2, 2)))
-    to_write_talfile.write("test.tal")
-
-    print(read_talfile("test.tal"))
-
