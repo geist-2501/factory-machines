@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from factory_machines.utils import LinearDecay, smoothen, can_graph
+from factory_machines.utils import LinearDecay, smoothen, can_graph, evaluate
 from factory_machines.replay_buffer import ReplayBuffer
 from talos import Agent
 
@@ -146,28 +146,6 @@ def _play_into_buffer(
     return s
 
 
-def _evaluate(
-        env: gym.Env,
-        agent: DQNAgent,
-        n_episodes=1,
-        max_episode_steps=10000
-):
-    mean_ep_rewards = []
-    for _ in range(n_episodes):
-        s, _ = env.reset()
-        total_ep_reward = 0
-        for _ in range(max_episode_steps):
-            action = agent.get_optimal_actions(np.array([s]))[0]
-            s, r, done, _, _ = env.step(action)
-            total_ep_reward += r
-
-            if done:
-                break
-
-        mean_ep_rewards.append(total_ep_reward)
-    return np.mean(mean_ep_rewards)
-
-
 # timesteps_per_epoch = 1
 # batch_size = 32
 # total_steps = 4 * 10**4
@@ -244,7 +222,7 @@ def train_dqn_agent(
             grad_norm_history.append(grad_norm.data.cpu().numpy())
 
         if step % evaluation_freq == 0:
-            score = _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
+            score = evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
             mean_reward_history.append(
                 score
             )
