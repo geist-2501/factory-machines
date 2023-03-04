@@ -31,7 +31,7 @@ class HDQNAgent(Agent):
 
         self.n_goals = n_goals
 
-        self.d1 = ReplayBufferWithGoals(10**4)
+        self.d1 = ReplayBuffer(10**4)
         self.d2 = ReplayBuffer(10**4)
 
         self.meta_cont_net = DQN(obs_size, n_goals).to(device)  # Meta-controller net / Q2.
@@ -192,12 +192,13 @@ def _play_into_buffers(
 
         # get action from controller.
         a = agent.get_epsilon_action(s, g)
+
         next_s, ext_r, done, _, _ = env.step(a)
+
         int_r = agent.get_intrinsic_reward(s, a, next_s, g)
         meta_r += ext_r
 
-        # TODO encode state and goal together.
-        agent.d1.add_with_goal(s, g, a, int_r, next_s, done)
+        agent.d1.add([*s, g], a, int_r, next_s, done)
 
         if agent.goal_satisfied(s, g):
             # End of the meta-action.
@@ -251,12 +252,13 @@ def train_h_dqn_agent(
 
             # get action from controller.
             a = agent.get_epsilon_action(s, g)
+
             next_s, ext_r, done, _, _ = env.step(a)
+
             int_r = agent.get_intrinsic_reward(s, a, next_s, g)
             meta_r += ext_r
 
-            # TODO encode state and goal together.
-            agent.d1.add_with_goal(s, g, a, int_r, next_s, done)
+            agent.d1.add([*s, g], a, int_r, next_s, done)
 
             # Update nets.
             agent.update_net(
