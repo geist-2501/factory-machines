@@ -39,3 +39,15 @@ class FactoryMachinesEnvSingle(FactoryMachinesEnvBase):
                 order = (np.random.normal(size=self._num_depots) > 0.5).astype(int)
 
         return order
+
+    def _get_depot_queues(self):
+        return self._depot_queues
+
+    def _depot_drop_off(self):
+        agent_inv_inverse = 1 - self._agent_inv
+        drop_off_reward = sum(self._depot_queues * self._agent_inv) * 10
+        self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
+        self._agent_inv = np.zeros(self._num_depots, dtype=int)
+        self._history.log("Agent dropped off resources.")
+        return drop_off_reward
+

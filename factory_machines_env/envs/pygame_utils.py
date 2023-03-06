@@ -1,7 +1,23 @@
 from collections import deque
-from typing import Tuple
+from typing import Tuple, List
 
 import pygame
+
+
+def draw_lines(
+        lines: List[str],
+        surface: pygame.Surface,
+        loc: Tuple[int, int],
+        font: pygame.font.Font,
+        color,
+):
+    _, font_size = font.size("test")
+    x_loc, y_loc = loc
+    y_offset = y_loc
+    for line in lines:
+        text = font.render(line, True, color)
+        text_rect = surface.blit(text, (x_loc, y_offset))
+        y_offset = text_rect.bottom
 
 
 class History:
