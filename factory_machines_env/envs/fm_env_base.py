@@ -6,6 +6,8 @@ import pygame
 from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
 
+from factory_machines_env.envs.pygame_utils import History
+
 
 def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
     output_loc = None
@@ -82,6 +84,8 @@ class FactoryMachinesEnvBase(gym.Env):
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
         self._depot_queues = np.zeros(self._num_depots, dtype=int)
 
+        self._history = History(size=3)
+
         self.observation_space = spaces.Dict(
             {
                 "agent_loc": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(2,), dtype=int),
@@ -149,9 +153,10 @@ class FactoryMachinesEnvBase(gym.Env):
             # Action is a move op.
             direction = self._action_to_direction[action]
             new_pos = self._agent_loc + direction
-            new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
-            if self._map[new_pos[1]][new_pos[0]] == 'w':
+            # new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
+            if self._is_oob(new_pos[1], new_pos[0]) or self._map[new_pos[1]][new_pos[0]] == 'w':
                 action_reward += -1
+                self._history.log("Agent bumped into a wall.")
             else:
                 self._agent_loc = new_pos
         elif action == 4:
@@ -165,6 +170,7 @@ class FactoryMachinesEnvBase(gym.Env):
             drop_off_reward = sum(self._depot_queues * self._agent_inv) * 10
             self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
             self._agent_inv = np.zeros(self._num_depots, dtype=int)
+            self._history.log("Agent dropped off resources.")
 
         reward = action_reward + drop_off_reward - 0.1
 
@@ -182,10 +188,15 @@ class FactoryMachinesEnvBase(gym.Env):
         cell_size = 64
         spacing = 8
 
-        header_size = cell_size * 2
+        pygame.font.init()
+        font = pygame.font.SysFont("monospace", 13)
+        _, font_height = font.size("test")
+
+        # The header contains 5 lines of text, without 2 spacers between and 2 spacers around.
+        header_size = spacing * 4 + font_height * (2 + self._history.size)
         header_origin = (spacing, cell_size * len_y + spacing)
 
-        screen_width, screen_height = cell_size * len_x, cell_size * len_y + header_size + spacing * 2
+        screen_width, screen_height = cell_size * len_x, cell_size * len_y + header_size
 
         pygame.init()
         if self.screen is None:
@@ -197,8 +208,6 @@ class FactoryMachinesEnvBase(gym.Env):
 
         if self.clock is None:
             self.clock = pygame.time.Clock()
-
-        font = pygame.font.SysFont("monospace", screen_height // 25)
 
         self.screen.fill(self.colors["background"])
 
@@ -254,7 +263,10 @@ class FactoryMachinesEnvBase(gym.Env):
         inv_text_rect = self.screen.blit(inv_text, header_origin)
 
         depot_text = font.render("DEP: " + _format_depots(self._depot_queues), True, self.colors["text"])
-        self.screen.blit(depot_text, (header_origin[0], inv_text_rect.bottom + spacing))
+        depot_text_rect = self.screen.blit(depot_text, (header_origin[0], inv_text_rect.bottom + spacing))
+
+        history_text = self._history.render(font, self.colors["text"], width=screen_width)
+        self.screen.blit(history_text, (header_origin[0], depot_text_rect.bottom + spacing))
 
         if self.render_mode == "human":
             pygame.event.pump()
@@ -289,12 +301,15 @@ class FactoryMachinesEnvBase(gym.Env):
             # Agent is on a depot.
             if self._agent_inv[depot_num] != 0:
                 # Agent is already holding material, administer punishment.
+                self._history.log(f"Tried to pick up already held resource D{depot_num}.")
                 return -1
             elif self._depot_queues[depot_num]:
-                # Agent picks up a needed resource,
+                # Agent picks up a needed resource.
+                self._history.log(f"Agent picked up required resource D{depot_num}.")
                 self._agent_inv[depot_num] = 1
                 return 5
 
+        self._history.log("Agent tried to grab a blank tile.")
         return 0
 
     def _is_oob(self, x: int, y: int):
