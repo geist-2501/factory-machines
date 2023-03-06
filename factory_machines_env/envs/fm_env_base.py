@@ -84,7 +84,7 @@ class FactoryMachinesEnvBase(gym.Env):
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
         self._depot_queues = np.zeros(self._num_depots, dtype=int)
 
-        self._history = History(size=3)
+        self._history = History(size=8)
 
         self.observation_space = spaces.Dict(
             {
@@ -192,11 +192,10 @@ class FactoryMachinesEnvBase(gym.Env):
         font = pygame.font.SysFont("monospace", 13)
         _, font_height = font.size("test")
 
-        # The header contains 5 lines of text, without 2 spacers between and 2 spacers around.
-        header_size = spacing * 4 + font_height * (2 + self._history.size)
-        header_origin = (spacing, cell_size * len_y + spacing)
+        header_width = 600
+        header_origin = (cell_size * len_x + spacing, spacing)
 
-        screen_width, screen_height = cell_size * len_x, cell_size * len_y + header_size
+        screen_width, screen_height = cell_size * len_x + header_width, cell_size * len_y
 
         pygame.init()
         if self.screen is None:

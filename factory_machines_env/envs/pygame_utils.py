@@ -6,7 +6,7 @@ import pygame
 
 class History:
     def __init__(self, size=4):
-        self.size = 4
+        self.size = size
         self._logs = deque(maxlen=size)
 
     def log(self, message: str):
