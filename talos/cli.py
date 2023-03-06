@@ -4,6 +4,7 @@ import gym
 import typer
 from rich import print
 from gym.utils.play import play as gym_play
+from gym.wrappers import RecordVideo
 from talos.registration import agent_registry, wrapper_registry
 from talos.config import app as config_app
 from talos.error import *
@@ -223,6 +224,16 @@ def play(
         opt_env_args: List[str] = typer.Option(
             [],
             "--env-arg",
+        ),
+        opt_save_to: Optional[str] = typer.Option(
+            None,
+            "--save-to",
+            "-s"
+        ),
+        opt_num_eps: int = typer.Option(
+            1,
+            "--num-eps",
+            "-n"
         )
 ):
     opt_env_args = _convert_to_key_value_list(opt_env_args)
@@ -240,10 +251,27 @@ def play(
             print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
             raise typer.Abort()
 
-        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human', env_args=opt_env_args)
+        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array', env_args=opt_env_args)
         agent, _ = create_agent(env_factory, talfile.id)
         agent.load(talfile.agent_data)
+
+        env = env_factory(opt_seed)
+
+        if opt_save_to:
+            file_prefix = f"{agent.name}-{opt_env}"
+            print(f"Recording to {opt_save_to}/{file_prefix}")
+            env = RecordVideo(
+                env=env,
+                video_folder=opt_save_to,
+                episode_trigger=lambda ep_num: True,
+                name_prefix=file_prefix
+            )
+
         try:
-            play_agent(agent, env_factory(opt_seed), wait_time=0.1)
+            for _ in range(opt_num_eps):
+                play_agent(agent, env, wait_time=0.5)
         except KeyboardInterrupt:
+            env.close()
             raise typer.Abort()
+
+        env.close()

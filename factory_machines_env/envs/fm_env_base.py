@@ -66,7 +66,7 @@ class FactoryMachinesEnvBase(gym.Env):
         'agent': (43, 79, 255)
     }
 
-    def __init__(self, render_mode: Optional[str] = None, map_id: str = "1") -> None:
+    def __init__(self, render_mode: Optional[str] = None, map_id="0") -> None:
         self._map = self.maps[map_id]
 
         output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
