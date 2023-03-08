@@ -1,3 +1,5 @@
+from typing import Dict, List
+
 import gym
 import numpy as np
 from talos import Agent
@@ -16,7 +18,7 @@ def can_graph():
     return tkinter_available
 
 
-class LinearDecay:
+class StaticLinearDecay:
     def __init__(self, start_value, final_value, max_steps):
         self.start_value = start_value
         self.final_value = final_value
@@ -27,6 +29,17 @@ class LinearDecay:
         upper = self.start_value * (self.max_steps - step)
         lower = self.final_value * step
         return (upper + lower) / self.max_steps
+
+
+class MeteredLinearDecay:
+    def __init__(self, start_value, final_value, max_steps):
+        self._decay = StaticLinearDecay(start_value, final_value, max_steps)
+        self._tick = 0
+
+    def next(self):
+        v = self._decay.get(self._tick)
+        self._tick += 1
+        return v
 
 
 def smoothen(data):
@@ -54,3 +67,14 @@ def evaluate(
 
         total_ep_rewards.append(total_ep_reward)
     return np.mean(total_ep_rewards)
+
+
+def flatten(obs: Dict) -> List:
+    return [
+        *obs["agent_loc"],
+        *obs["agent_obs"].flatten(),
+        *obs["agent_inv"],
+        *obs["depot_locs"].flatten(),
+        *obs["depot_queues"],
+        *obs["output_loc"],
+    ]

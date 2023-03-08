@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from factory_machines.utils import LinearDecay, smoothen, can_graph, evaluate
+from factory_machines.utils import StaticLinearDecay, smoothen, can_graph, evaluate
 from factory_machines.replay_buffer import ReplayBuffer
 from talos import Agent
 
@@ -166,7 +166,7 @@ def train_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
         opt: torch.optim.Optimizer,
-        epsilon_decay: LinearDecay = LinearDecay(1, 0.1, 1 * 10 ** 4),
+        epsilon_decay: StaticLinearDecay = StaticLinearDecay(1, 0.1, 1 * 10 ** 4),
         max_steps: int = 4 * 10 ** 4,
         timesteps_per_epoch=1,
         batch_size=30,
@@ -259,7 +259,7 @@ def dqn_training_wrapper(
         env_factory=env_factory,
         agent=agent,
         opt=torch.optim.NAdam(agent.parameters(), lr=dqn_config.getfloat("learning_rate")),
-        epsilon_decay=LinearDecay(
+        epsilon_decay=StaticLinearDecay(
             start_value=dqn_config.getfloat("init_epsilon"),
             final_value=dqn_config.getfloat("final_epsilon"),
             max_steps=dqn_config.getint("decay_steps")

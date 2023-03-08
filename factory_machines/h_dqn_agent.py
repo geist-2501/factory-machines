@@ -1,5 +1,6 @@
-from typing import Dict, Callable, Tuple, Any
+from typing import Dict, Callable, Tuple, Any, TypeVar, List
 from operator import itemgetter
+from abc import ABC, abstractmethod
 
 import gym
 import numpy as np
@@ -11,11 +12,16 @@ from tqdm import trange
 
 from factory_machines.dqn_agent import DQN
 from factory_machines.replay_buffer import ReplayBuffer
-from factory_machines.utils import can_graph, evaluate, smoothen
+from factory_machines.utils import can_graph, evaluate, smoothen, StaticLinearDecay, MeteredLinearDecay
 from talos import Agent
 
 
-class HDQNAgent(Agent):
+DictObsType = TypeVar("DictObsType")
+FlatObsType = TypeVar("FlatObsType")
+ActType = TypeVar("ActType")
+
+
+class HDQNAgent(Agent, ABC):
 
     def __init__(
             self,
@@ -86,33 +92,44 @@ class HDQNAgent(Agent):
 
         return loss
 
-    def get_intrinsic_reward(self, obs: np.ndarray,  action: int, next_obs: np.ndarray, goal: int) -> float:
-        return 0.1  # TODO implement.
+    @abstractmethod
+    def get_intrinsic_reward(self, obs: DictObsType,  action: ActType, next_obs: DictObsType, goal: ActType) -> float:
+        pass
 
-    def goal_satisfied(self, obs: np.ndarray, goal: int) -> bool:
-        # TODO implement.
-        return np.random.choice([True, False])
+    @abstractmethod
+    def goal_satisfied(self, obs: DictObsType, goal: ActType) -> bool:
+        pass
 
-    def get_action(self, state: np.ndarray, extra_state=None) -> Tuple[int, Any]:
+    @abstractmethod
+    def to_q1(self, obs: DictObsType) -> FlatObsType:
+        """Process an observation before being fed to Q1."""
+        pass
+
+    @abstractmethod
+    def to_q2(self, obs: DictObsType) -> FlatObsType:
+        """Process an observation before being fed to Q2."""
+        pass
+
+    def get_action(self, obs: DictObsType, extra_state=None) -> Tuple[ActType, Any]:
         """Get the optimal action given a state."""
         goal = extra_state
-        meta_controller_obs = np.expand_dims(state, axis=0)
+        meta_controller_obs = self.to_q2(obs)
         if goal is None:
-            goal = self.get_epsilon(meta_controller_obs, 0, self.meta_cont_net)[0]
+            goal = self.get_epsilon(meta_controller_obs, epsilon=0, net=self.meta_cont_net)
 
-        controller_obs = np.append(meta_controller_obs, goal)
-        action = self.get_epsilon(controller_obs, epsilon=0, net=self.cont_net)[0]
+        controller_obs = np.append(self.to_q1(meta_controller_obs), goal)
+        action = self.get_epsilon(controller_obs, epsilon=0, net=self.cont_net)
 
         return action, goal
 
-    def get_epsilon_action(self, obs: np.ndarray, goal: int):
+    def get_epsilon_action(self, obs: DictObsType, goal: ActType) -> ActType:
         """Get an action from the controller, using the epsilon greedy policy."""
-        controller_obs = np.concatenate(obs, goal)
+        controller_obs = np.concatenate(self.to_q1(obs), goal)
         return self.get_epsilon(controller_obs, self.eps1[goal], self.cont_net)
 
-    def get_epsilon_goal(self, obs: np.ndarray):
+    def get_epsilon_goal(self, obs: DictObsType) -> ActType:
         """Get a goal from the meta-controller, using the epsilon greedy policy."""
-        return self.get_epsilon(obs, self.eps2, self.meta_cont_net)
+        return self.get_epsilon(self.to_q1(obs), self.eps2, self.meta_cont_net)
 
     def update_net(
             self,
@@ -138,15 +155,14 @@ class HDQNAgent(Agent):
 
         return loss, grad_norm
 
-    def get_epsilon(self, states: np.ndarray, epsilon: float, net: DQN):
+    def get_epsilon(self, states: np.ndarray, epsilon: float, net: DQN) -> np.ndarray:
         states = torch.tensor(states, device=self.device, dtype=torch.float32)
-        net.eval()
+
         with torch.no_grad():
             qvalues = net(states)
-        net.train()
 
         if len(states.shape) == 1:
-            # Single version:
+            # Single version.
             n_actions = qvalues.shape[0]
             should_explore = np.random.choice([0, 1], p=[1 - epsilon, epsilon])
             if should_explore:
@@ -188,12 +204,18 @@ def _play_episode(
         max_grad_norm,
         max_timesteps=1000,
         learn=False,
+        epsilon1_decay: List[MeteredLinearDecay] = None,
+        epsilon2_decay: MeteredLinearDecay = None,
         gather_freq=20
 ):
     q1_loss_history = []
     q2_loss_history = []
     q1_grad_norm_history = []
     q2_grad_norm_history = []
+
+    # Update the meta-controller's epsilon at the start of each episode.
+    if epsilon2_decay:
+        agent.eps2 = epsilon2_decay.next()
 
     s, _ = env.reset()
     g = agent.get_epsilon_goal(s)
@@ -215,7 +237,7 @@ def _play_episode(
         int_r = agent.get_intrinsic_reward(s, a, next_s, g)
         meta_r += ext_r
 
-        agent.d1.add([*s, g], a, int_r, next_s, done)
+        agent.d1.add([*agent.to_q1(s), g], a, int_r, agent.to_q1(next_s), done)
 
         if learn:
             # Update nets.
@@ -244,7 +266,12 @@ def _play_episode(
 
         if agent.goal_satisfied(s, g):
             # End of the meta-action.
-            agent.d2.add(meta_s, g, ext_r, next_s, done)
+            agent.d2.add(agent.to_q2(meta_s), g, ext_r, agent.to_q2(next_s), done)
+
+            # Update the epsilon for the completed goal.
+            if epsilon1_decay:
+                agent.eps1[g] = epsilon1_decay[g].next()
+
             g = None
 
         s = next_s
@@ -265,7 +292,10 @@ def train_h_dqn_agent(
         replay_buffer_size=10**4,
         batch_size=32,
         max_grad_norm=1000,
-        eval_freq=10
+        eval_freq=10,
+        decay_start=1,
+        decay_end=0.1,
+        decay_steps=10**4
 ):
     """Train the hDQN agent following the algorithm outlined by Kulkarni et al. 2016."""
     # Init graphing.
@@ -277,10 +307,14 @@ def train_h_dqn_agent(
     loss_history = np.array([])
     grad_norm_history = np.array([])
     mean_reward_history = []
+    epsilon_history = []
 
     # Init all epsilons.
     agent.epsilon1 = np.ones(agent.n_goals)
     agent.epsilon2 = 1
+
+    epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps) for _ in range(agent.n_goals)]
+    epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
 
     env = env_factory(0)
     s, _ = env.reset()
@@ -305,13 +339,18 @@ def train_h_dqn_agent(
             batch_size=batch_size,
             max_grad_norm=max_grad_norm,
             max_timesteps=max_timesteps,
-            learn=True
+            learn=True,
+            epsilon1_decay=epsilon1_decay,
+            epsilon2_decay=epsilon2_decay
         )
+
+        epsilon_history.append([
+            agent.eps2,
+            *agent.eps1
+        ])
 
         np.append(loss_history, ep_loss_history, axis=1)
         np.append(grad_norm_history, ep_grad_norm_history, axis=1)
-
-        # TODO Anneal epsilons.
 
         if ep % eval_freq == 0:
             score = evaluate(env_factory(ep), agent, n_episodes=3, max_episode_steps=1000)
@@ -319,7 +358,7 @@ def train_h_dqn_agent(
                 score
             )
 
-            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history)
+            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history)
 
 
 def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
