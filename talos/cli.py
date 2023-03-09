@@ -127,7 +127,7 @@ def train(
     env_factory = create_env_factory(opt_env, opt_wrapper, env_args=opt_env_args)
     agent, training_wrapper = create_agent(env_factory, opt_agent, device=device)
 
-    agent_config = config[opt_agent]
+    agent_config = config[opt_agent] if opt_agent in config.sections() else config['DEFAULT']
     print(f"\nProceeding to train a {opt_agent} on {opt_env} with config values:")
     print(dict(agent_config))
 

@@ -46,7 +46,7 @@ class HDQNAgent(Agent, ABC):
         self.d2 = ReplayBuffer(10**4)
 
         q2_obs_size = len(self.to_q2(obs))
-        q1_obs_size = len(self.to_q1(obs)) + n_goals
+        q1_obs_size = len(self.to_q1(obs, 0))
 
         # Meta-controller Q network / Q2.
         self.meta_cont_net = DQN(q2_obs_size, n_goals).to(device)
@@ -80,7 +80,8 @@ class HDQNAgent(Agent, ABC):
         predicted_qvalues = net(states)  # shape: [batch_size, n_actions]
 
         # compute q-values for all actions in next states
-        predicted_next_qvalues = net_fixed(next_states)  # shape: [batch_size, n_actions]
+        with torch.no_grad():  # TODO add this change to DQN too!
+            predicted_next_qvalues = net_fixed(next_states)  # shape: [batch_size, n_actions]
 
         # select q-values for chosen actions
         predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]  # shape: [batch_size]
@@ -177,7 +178,7 @@ class HDQNAgent(Agent, ABC):
             if should_explore:
                 return np.random.choice(n_actions)
             else:
-                qvalues.argmax().cpu()
+                return qvalues.argmax().item()
 
         elif len(states.shape) == 2:
             # Batch version
@@ -240,7 +241,7 @@ def _play_episode(
     s, _ = env.reset()
     g = agent.get_epsilon_goal(s)
     meta_r = 0
-    meta_s = None
+    meta_s = s
     for step in range(max_timesteps):
         if g is None:
             # Start step for the meta controller.
@@ -325,8 +326,8 @@ def train_h_dqn_agent(
     else:
         fig, axs = None, None
 
-    loss_history = np.array([])
-    grad_norm_history = np.array([])
+    loss_history = np.empty(shape=(2,0))
+    grad_norm_history = np.empty(shape=(2,0))
     mean_reward_history = []
     epsilon_history = []
 

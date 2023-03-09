@@ -85,7 +85,7 @@ def create_agent(env_factory, agent_name, device: str = get_device()):
     env = env_factory(0)
     state, _ = env.reset()
     agent = agent_factory(
-        len(state),
+        state,
         env.action_space.n,
         device
     )
