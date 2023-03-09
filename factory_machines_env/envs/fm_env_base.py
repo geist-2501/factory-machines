@@ -1,10 +1,13 @@
 from typing import Optional, Union, List, Tuple
+from abc import ABC, abstractmethod
 
 import gym
 import numpy as np
 import pygame
 from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
+
+from factory_machines_env.envs.pygame_utils import History
 
 
 def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
@@ -25,11 +28,10 @@ def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
     return output_loc, np.array(depot_locs), len_x, len_y
 
 
-def _format_depots(arr):
-    return ', '.join(map(lambda i: f"D{i[0]}: {i[1]}", enumerate(arr)))
 
 
-class FactoryMachinesEnvBase(gym.Env):
+
+class FactoryMachinesEnvBase(gym.Env, ABC):
     metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 4}
     maps = {
         "0": [
@@ -80,7 +82,8 @@ class FactoryMachinesEnvBase(gym.Env):
 
         self._agent_loc = np.array(output_loc, dtype=int)
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
-        self._depot_queues = np.zeros(self._num_depots, dtype=int)
+
+        self._history = History(size=8)
 
         self.observation_space = spaces.Dict(
             {
@@ -125,9 +128,14 @@ class FactoryMachinesEnvBase(gym.Env):
             "agent_obs": local_obs,
             "agent_inv": self._agent_inv,
             "depot_locs": self._depot_locs,
-            "depot_queues": self._depot_queues,
+            "depot_queues": self._get_depot_queues(),
             "output_loc": self._output_loc,
         }
+
+    @abstractmethod
+    def _get_depot_queues(self):
+        """Get the amount of items needed from each queue."""
+        pass
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
         super().reset(seed=seed, options=options)
@@ -135,7 +143,6 @@ class FactoryMachinesEnvBase(gym.Env):
         self._agent_loc = self._output_loc
 
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
-        self._depot_queues = np.zeros(self._num_depots, dtype=int)
 
         obs = self._get_obs()
 
@@ -149,9 +156,10 @@ class FactoryMachinesEnvBase(gym.Env):
             # Action is a move op.
             direction = self._action_to_direction[action]
             new_pos = self._agent_loc + direction
-            new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
-            if self._map[new_pos[1]][new_pos[0]] == 'w':
+            # new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
+            if self._is_oob(new_pos[1], new_pos[0]) or self._map[new_pos[1]][new_pos[0]] == 'w':
                 action_reward += -1
+                self._history.log("Agent bumped into a wall.")
             else:
                 self._agent_loc = new_pos
         elif action == 4:
@@ -161,10 +169,7 @@ class FactoryMachinesEnvBase(gym.Env):
         # Check depot drop off.
         drop_off_reward = 0
         if np.array_equal(self._agent_loc, self._output_loc):
-            agent_inv_inverse = 1 - self._agent_inv
-            drop_off_reward = sum(self._depot_queues * self._agent_inv) * 10
-            self._depot_queues *= agent_inv_inverse  # Clear the queues of items the agent had.
-            self._agent_inv = np.zeros(self._num_depots, dtype=int)
+            drop_off_reward = self._depot_drop_off()
 
         reward = action_reward + drop_off_reward - 0.1
 
@@ -176,16 +181,24 @@ class FactoryMachinesEnvBase(gym.Env):
 
         return obs, reward, False, False, info
 
+    @abstractmethod
+    def _depot_drop_off(self):
+        """Handle what happens when the agent arrives at the depot."""
+        pass
+
     def render(self) -> Optional[Union[RenderFrame, List[RenderFrame]]]:
         len_x = self._len_x
         len_y = self._len_y
         cell_size = 64
         spacing = 8
 
-        header_size = cell_size * 2
-        header_origin = (spacing, cell_size * len_y + spacing)
+        pygame.font.init()
+        font = pygame.font.SysFont("monospace", 13)
 
-        screen_width, screen_height = cell_size * len_x, cell_size * len_y + header_size + spacing * 2
+        header_width = 600
+        header_origin = (cell_size * len_x + spacing, spacing)
+
+        screen_width, screen_height = cell_size * len_x + header_width, cell_size * len_y
 
         pygame.init()
         if self.screen is None:
@@ -197,8 +210,6 @@ class FactoryMachinesEnvBase(gym.Env):
 
         if self.clock is None:
             self.clock = pygame.time.Clock()
-
-        font = pygame.font.SysFont("monospace", screen_height // 25)
 
         self.screen.fill(self.colors["background"])
 
@@ -250,11 +261,7 @@ class FactoryMachinesEnvBase(gym.Env):
         )
 
         # Draw text.
-        inv_text = font.render("INV: " + _format_depots(self._agent_inv), True, self.colors["text"])
-        inv_text_rect = self.screen.blit(inv_text, header_origin)
-
-        depot_text = font.render("DEP: " + _format_depots(self._depot_queues), True, self.colors["text"])
-        self.screen.blit(depot_text, (header_origin[0], inv_text_rect.bottom + spacing))
+        self._render_info(font, header_origin, screen_width, spacing)
 
         if self.render_mode == "human":
             pygame.event.pump()
@@ -264,6 +271,19 @@ class FactoryMachinesEnvBase(gym.Env):
             return np.transpose(
                 np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
             )
+
+    def _render_info(self, font, header_origin, screen_width, spacing):
+        # Draw inventory.
+        inv_text = font.render("INV: " + self._format_depots(self._agent_inv), True, self.colors["text"])
+        inv_text_rect = self.screen.blit(inv_text, header_origin)
+
+        # Draw depot queues.
+        depot_text = font.render("DEP: " + self._format_depots(self._get_depot_queues()), True, self.colors["text"])
+        depot_text_rect = self.screen.blit(depot_text, (header_origin[0], inv_text_rect.bottom + spacing))
+
+        # Draw history log.
+        history_text = self._history.render(font, self.colors["text"], width=screen_width)
+        self.screen.blit(history_text, (header_origin[0], depot_text_rect.bottom + spacing))
 
     def close(self):
         if self.screen is not None:
@@ -282,6 +302,8 @@ class FactoryMachinesEnvBase(gym.Env):
     def _try_grab(self) -> int:
         """Try and add the current depot resource to the agent inventory.
         Returns reward if agent needed the resource, punishment if not."""
+        depot_queues = self._get_depot_queues()
+
         for depot_num, depot_loc in enumerate(self._depot_locs):
             if not np.array_equal(self._agent_loc, depot_loc):
                 continue
@@ -289,13 +311,20 @@ class FactoryMachinesEnvBase(gym.Env):
             # Agent is on a depot.
             if self._agent_inv[depot_num] != 0:
                 # Agent is already holding material, administer punishment.
+                self._history.log(f"Tried to pick up already held resource D{depot_num}.")
                 return -1
-            elif self._depot_queues[depot_num]:
-                # Agent picks up a needed resource,
+            elif depot_queues[depot_num]:
+                # Agent picks up a needed resource.
+                self._history.log(f"Agent picked up required resource D{depot_num}.")
                 self._agent_inv[depot_num] = 1
                 return 5
 
+        self._history.log("Agent tried to grab a blank tile.")
         return 0
 
     def _is_oob(self, x: int, y: int):
         return x < 0 or x >= self._len_x or y < 0 or y >= self._len_y
+
+    @staticmethod
+    def _format_depots(arr):
+        return ', '.join(map(lambda i: f"D{i[0]}: {i[1]}", enumerate(arr)))
