@@ -251,7 +251,7 @@ def play(
             print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
             raise typer.Abort()
 
-        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array', env_args=opt_env_args)
+        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human', env_args=opt_env_args)
         agent, _ = create_agent(env_factory, talfile.id)
         agent.load(talfile.agent_data)
 

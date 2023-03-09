@@ -88,9 +88,9 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         self.observation_space = spaces.Dict(
             {
                 "agent_loc": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(2,), dtype=int),
-                "agent_obs": spaces.Box(0, 1, shape=(3, 3), dtype=int),
+                "agent_obs": spaces.Box(0, 1, shape=(9,), dtype=int),
                 "agent_inv": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
-                "depot_locs": spaces.Box(0, max(len_x, len_y), shape=(len(self._depot_locs), 2), dtype=int),
+                "depot_locs": spaces.Box(0, max(len_x, len_y), shape=(len(self._depot_locs) * 2,), dtype=int),
                 "depot_queues": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
                 "output_loc": spaces.Box(0, max(len_x, len_y), shape=(2,), dtype=int),
             }
@@ -125,9 +125,9 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
         return {
             "agent_loc": self._agent_loc,
-            "agent_obs": local_obs,
+            "agent_obs": local_obs.flatten(),
             "agent_inv": self._agent_inv,
-            "depot_locs": self._depot_locs,
+            "depot_locs": self._depot_locs.flatten(),
             "depot_queues": self._get_depot_queues(),
             "output_loc": self._output_loc,
         }
