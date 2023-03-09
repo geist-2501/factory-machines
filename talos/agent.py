@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Any, Tuple
 
 
 class Agent(ABC):
@@ -10,7 +10,7 @@ class Agent(ABC):
         self.name = name
 
     @abstractmethod
-    def get_action(self, state):
+    def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
         """Request an action."""
         pass
 

@@ -20,10 +20,11 @@ def play_agent(
         wait_time: float = None
 ):
     s, _ = env.reset()
+    extra = None
     reward_history = []
     info_history = []
     for _ in range(max_episode_steps):
-        action = agent.get_action(s)
+        action, extra = agent.get_action(s, extra)
         s, r, done, _, info = env.step(action)
         reward_history.append(r)
         info_history.append(info)

@@ -1,5 +1,5 @@
 import configparser
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple, Any
 
 import gym
 import torch
@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from factory_machines.utils import LinearDecay, smoothen, can_graph
+from factory_machines.utils import StaticLinearDecay, smoothen, can_graph, evaluate
 from factory_machines.replay_buffer import ReplayBuffer
 from talos import Agent
 
@@ -88,8 +88,8 @@ class DQNAgent(Agent):
 
         return loss
 
-    def get_action(self, state):
-        return self.get_optimal_actions(np.array([state]))[0]
+    def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
+        return self.get_optimal_actions(np.array([state]))[0], extra_state
 
     def get_epsilon_actions(self, states: np.ndarray):
         """Pick actions according to an epsilon greedy strategy."""
@@ -126,9 +126,6 @@ class DQNAgent(Agent):
         self.target_net.load_state_dict(agent_data)
 
 
-num_episodes_ran = 0
-
-
 def _play_into_buffer(
         env: gym.Env,
         agent: DQNAgent,
@@ -147,28 +144,6 @@ def _play_into_buffer(
             s, _ = env.reset()
 
     return s
-
-
-def _evaluate(
-        env: gym.Env,
-        agent: DQNAgent,
-        n_episodes=1,
-        max_episode_steps=10000
-):
-    mean_ep_rewards = []
-    for _ in range(n_episodes):
-        s, _ = env.reset()
-        total_ep_reward = 0
-        for _ in range(max_episode_steps):
-            action = agent.get_optimal_actions(np.array([s]))[0]
-            s, r, done, _, _ = env.step(action)
-            total_ep_reward += r
-
-            if done:
-                break
-
-        mean_ep_rewards.append(total_ep_reward)
-    return np.mean(mean_ep_rewards)
 
 
 # timesteps_per_epoch = 1
@@ -191,7 +166,7 @@ def train_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
         opt: torch.optim.Optimizer,
-        epsilon_decay: LinearDecay = LinearDecay(1, 0.1, 1 * 10 ** 4),
+        epsilon_decay: StaticLinearDecay = StaticLinearDecay(1, 0.1, 1 * 10 ** 4),
         max_steps: int = 4 * 10 ** 4,
         timesteps_per_epoch=1,
         batch_size=30,
@@ -247,7 +222,7 @@ def train_dqn_agent(
             grad_norm_history.append(grad_norm.data.cpu().numpy())
 
         if step % evaluation_freq == 0:
-            score = _evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
+            score = evaluate(env_factory(step), agent, n_episodes=3, max_episode_steps=1000)
             mean_reward_history.append(
                 score
             )
@@ -275,7 +250,6 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
 
     plt.pause(0.05)
 
-
 def dqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
@@ -285,7 +259,7 @@ def dqn_training_wrapper(
         env_factory=env_factory,
         agent=agent,
         opt=torch.optim.NAdam(agent.parameters(), lr=dqn_config.getfloat("learning_rate")),
-        epsilon_decay=LinearDecay(
+        epsilon_decay=StaticLinearDecay(
             start_value=dqn_config.getfloat("init_epsilon"),
             final_value=dqn_config.getfloat("final_epsilon"),
             max_steps=dqn_config.getint("decay_steps")
