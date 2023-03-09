@@ -1,3 +1,4 @@
+import configparser
 from typing import Dict, Callable, Tuple, Any, TypeVar, List
 from operator import itemgetter
 from abc import ABC, abstractmethod
@@ -25,7 +26,7 @@ class HDQNAgent(Agent, ABC):
 
     def __init__(
             self,
-            obs_size: int,
+            obs: DictObsType,
             n_goals: int,
             n_actions: int,
             gamma: float = 0.99,
@@ -44,10 +45,16 @@ class HDQNAgent(Agent, ABC):
         self.d1 = ReplayBuffer(10**4)
         self.d2 = ReplayBuffer(10**4)
 
-        self.meta_cont_net = DQN(obs_size, n_goals).to(device)  # Meta-controller net / Q2.
-        self.meta_cont_net_fixed = DQN(obs_size, n_goals).to(device)  # Meta-controller fixed net.
-        self.cont_net = DQN(n_goals, n_actions).to(device)  # Controller net / Q1.
-        self.cont_net_fixed = DQN(n_goals, n_actions).to(device)  # Controller fixed net.
+        q2_obs_size = len(self.to_q2(obs))
+        q1_obs_size = len(self.to_q1(obs)) + n_goals
+
+        # Meta-controller Q network / Q2.
+        self.meta_cont_net = DQN(q2_obs_size, n_goals).to(device)
+        self.meta_cont_net_fixed = DQN(q2_obs_size, n_goals).to(device)
+
+        # Controller Q network / Q1.
+        self.cont_net = DQN(q1_obs_size, n_actions).to(device)
+        self.cont_net_fixed = DQN(q1_obs_size, n_actions).to(device)
 
     def compute_td_loss(
             self,
@@ -94,42 +101,44 @@ class HDQNAgent(Agent, ABC):
 
     @abstractmethod
     def get_intrinsic_reward(self, obs: DictObsType,  action: ActType, next_obs: DictObsType, goal: ActType) -> float:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def goal_satisfied(self, obs: DictObsType, goal: ActType) -> bool:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
-    def to_q1(self, obs: DictObsType) -> FlatObsType:
+    def to_q1(self, obs: DictObsType, goal: ActType) -> FlatObsType:
         """Process an observation before being fed to Q1."""
-        pass
+        return [*obs, *self._onehot(goal, self.n_goals)]
 
     @abstractmethod
     def to_q2(self, obs: DictObsType) -> FlatObsType:
         """Process an observation before being fed to Q2."""
-        pass
+        raise NotImplementedError
 
     def get_action(self, obs: DictObsType, extra_state=None) -> Tuple[ActType, Any]:
         """Get the optimal action given a state."""
-        goal = extra_state
-        meta_controller_obs = self.to_q2(obs)
+        goal = extra_state  # Treat the extra state we're given as the goal.
         if goal is None:
+            # If no goal is given, get one from the meta-controller.
+            meta_controller_obs = self.to_q2(obs)
             goal = self.get_epsilon(meta_controller_obs, epsilon=0, net=self.meta_cont_net)
 
-        controller_obs = np.append(self.to_q1(meta_controller_obs), goal)
+        # Get an action from the controller, incorporating the goal.
+        controller_obs = self.to_q1(obs, goal)
         action = self.get_epsilon(controller_obs, epsilon=0, net=self.cont_net)
 
         return action, goal
 
     def get_epsilon_action(self, obs: DictObsType, goal: ActType) -> ActType:
         """Get an action from the controller, using the epsilon greedy policy."""
-        controller_obs = np.concatenate(self.to_q1(obs), goal)
+        controller_obs = self.to_q1(obs, goal)
         return self.get_epsilon(controller_obs, self.eps1[goal], self.cont_net)
 
     def get_epsilon_goal(self, obs: DictObsType) -> ActType:
         """Get a goal from the meta-controller, using the epsilon greedy policy."""
-        return self.get_epsilon(self.to_q1(obs), self.eps2, self.meta_cont_net)
+        return self.get_epsilon(self.to_q2(obs), self.eps2, self.meta_cont_net)
 
     def update_net(
             self,
@@ -145,13 +154,13 @@ class HDQNAgent(Agent, ABC):
 
         loss = self.compute_td_loss(s, a, r, s_dash, is_done, net, net_fixed)
 
+        # TODO I'm unsure about this. In regular DQN the fixed net is updated every K-steps.
+        net_fixed.load_state_dict(net.state_dict())
+
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
         opt.step()
         opt.zero_grad()
-
-        # TODO I'm unsure about this. In regular DQN the fixed net is updated every K-steps.
-        net_fixed.load_state_dict(net.state_dict())
 
         return loss, grad_norm
 
@@ -195,11 +204,22 @@ class HDQNAgent(Agent, ABC):
         self.cont_net.load_state_dict(cont_data)
         self.cont_net_fixed.load_state_dict(cont_data)
 
+    @staticmethod
+    def _onehot(category, n_categories):
+        return [1 if i == category else 0 for i in range(n_categories)]
+
+    def q1_params(self):
+        return self.cont_net.parameters()
+
+    def q2_params(self):
+        return self.meta_cont_net.parameters()
+
 
 def _play_episode(
         env: gym.Env,
         agent: HDQNAgent,
-        opt: torch.optim.Optimizer,
+        opt1: torch.optim.Optimizer,
+        opt2: torch.optim.Optimizer,
         batch_size,
         max_grad_norm,
         max_timesteps=1000,
@@ -237,7 +257,7 @@ def _play_episode(
         int_r = agent.get_intrinsic_reward(s, a, next_s, g)
         meta_r += ext_r
 
-        agent.d1.add([*agent.to_q1(s), g], a, int_r, agent.to_q1(next_s), done)
+        agent.d1.add(agent.to_q1(s, g), a, int_r, agent.to_q1(next_s, g), done)
 
         if learn:
             # Update nets.
@@ -245,7 +265,7 @@ def _play_episode(
                 net=agent.cont_net,
                 net_fixed=agent.cont_net_fixed,
                 buffer=agent.d1,
-                opt=opt,
+                opt=opt1,
                 batch_size=batch_size,
                 max_grad_norm=max_grad_norm
             )
@@ -253,7 +273,7 @@ def _play_episode(
                 net=agent.meta_cont_net,
                 net_fixed=agent.meta_cont_net_fixed,
                 buffer=agent.d2,
-                opt=opt,
+                opt=opt2,
                 batch_size=batch_size,
                 max_grad_norm=max_grad_norm
             )
@@ -286,7 +306,8 @@ def _play_episode(
 def train_h_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
-        opt: torch.optim.Optimizer,
+        opt1: torch.optim.Optimizer,
+        opt2: torch.optim.Optimizer,
         num_episodes: int = 100,
         max_timesteps=1000,
         replay_buffer_size=10**4,
@@ -324,7 +345,8 @@ def train_h_dqn_agent(
         _play_episode(
             env=env,
             agent=agent,
-            opt=opt,
+            opt1=opt1,
+            opt2=opt2,
             batch_size=batch_size,
             max_grad_norm=max_grad_norm,
             max_timesteps=replay_buffer_size,
@@ -335,7 +357,8 @@ def train_h_dqn_agent(
         ep_loss_history, ep_grad_norm_history = _play_episode(
             env=env,
             agent=agent,
-            opt=opt,
+            opt1=opt1,
+            opt2=opt2,
             batch_size=batch_size,
             max_grad_norm=max_grad_norm,
             max_timesteps=max_timesteps,
@@ -358,7 +381,27 @@ def train_h_dqn_agent(
                 score
             )
 
-            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history)
+            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history)
+
+
+def hdqn_training_wrapper(
+        env_factory: Callable[[int], gym.Env],
+        agent: HDQNAgent,
+        dqn_config: configparser.SectionProxy
+):
+    train_h_dqn_agent(
+        env_factory=env_factory,
+        agent=agent,
+        opt1=torch.optim.NAdam(agent.q1_params(), lr=dqn_config.getfloat("learning_rate")),
+        opt2=torch.optim.NAdam(agent.q2_params(), lr=dqn_config.getfloat("learning_rate")),
+        num_episodes=dqn_config.getint("num_episodes"),
+        max_timesteps=dqn_config.getint("total_steps"),
+        replay_buffer_size=dqn_config.getint("replay_buffer_size"),
+        batch_size=dqn_config.getint("batch_size"),
+        decay_start=dqn_config.getfloat("init_epsilon"),
+        decay_end=dqn_config.getfloat("final_epsilon"),
+        decay_steps=dqn_config.getfloat("decay_steps")
+    )
 
 
 def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):

@@ -29,7 +29,7 @@ class DQN(nn.Module):
 
 
 class DQNAgent(Agent):
-    def __init__(self, obs_size, n_actions, epsilon=0, gamma=0.99, device='cpu'):
+    def __init__(self, obs, n_actions, epsilon=0, gamma=0.99, device='cpu'):
         super().__init__("DQN")
         self.epsilon = epsilon
         self.gamma = gamma
@@ -37,6 +37,7 @@ class DQNAgent(Agent):
         self.device = device
 
         # Init both networks.
+        obs_size = len(obs)
         self.net = DQN(obs_size, n_actions).to(device)
         self.target_net = DQN(obs_size, n_actions).to(device)
         self.target_net.load_state_dict(self.net.state_dict())
@@ -249,6 +250,7 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
     axs[2].plot(smoothen(grad_norm_history))
 
     plt.pause(0.05)
+
 
 def dqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],

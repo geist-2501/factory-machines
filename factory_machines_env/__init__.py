@@ -1,5 +1,5 @@
 from gym.envs.registration import register
-from factory_machines_env.wrappers import FactoryMachinesFlattenWrapper, FactoryMachinesFlattenRelativeWrapper
+from factory_machines_env.wrappers import FactoryMachinesFlattenWrapper, FactoryMachinesFlattenRelativeWrapper, FactoryMachinesRelativeWrapper
 from talos import register_wrapper
 
 register(
@@ -22,4 +22,9 @@ register_wrapper(
 register_wrapper(
     id='FMFlattenRel',
     wrapper_factory=lambda outer: FactoryMachinesFlattenRelativeWrapper(outer)
+)
+
+register_wrapper(
+    id='FMRel',
+    wrapper_factory=lambda outer: FactoryMachinesRelativeWrapper(outer)
 )

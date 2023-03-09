@@ -3,6 +3,7 @@ from typing import Optional, Union, List, Tuple
 import gym
 import numpy as np
 from gym.core import RenderFrame, ActType, ObsType
+from gym import spaces
 
 
 class MockEnv(gym.Env):
@@ -17,6 +18,8 @@ class MockEnv(gym.Env):
         self._agent_loc = agent_loc
         self._depot_locs = depot_locs
         self._output_loc = output_loc
+
+        self.action_space = spaces.Discrete(6)
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
         obs = self._make_dummy_obs()
