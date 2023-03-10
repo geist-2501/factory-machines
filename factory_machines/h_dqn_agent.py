@@ -1,5 +1,5 @@
 import configparser
-from typing import Dict, Callable, Tuple, Any, TypeVar, List
+from typing import Dict, Callable, Tuple, Any, TypeVar, List, Optional
 from operator import itemgetter
 from abc import ABC, abstractmethod
 
@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
-from tqdm import trange
+from tqdm import trange, tqdm
 
 from factory_machines.dqn_agent import DQN
 from factory_machines.replay_buffer import ReplayBuffer
@@ -227,7 +227,9 @@ def _play_episode(
         learn=False,
         epsilon1_decay: List[MeteredLinearDecay] = None,
         epsilon2_decay: MeteredLinearDecay = None,
-        gather_freq=20
+        gather_freq=20,
+        meta_action_timelimit: Optional[int] = 100,
+        show_progress=False
 ):
     q1_loss_history = []
     q2_loss_history = []
@@ -242,21 +244,30 @@ def _play_episode(
     g = agent.get_epsilon_goal(s)
     meta_r = 0
     meta_s = s
-    for step in range(max_timesteps):
+    meta_t = 0  # Timesteps taken for the meta-action.
+
+    step_iter = trange(max_timesteps, leave=False) if show_progress else range(max_timesteps)
+    for step in step_iter:
+
+        meta_t += 1
+
         if g is None:
             # Start step for the meta controller.
             g = agent.get_epsilon_goal(s)
             # Take note of the start state, so we can store it in the buffer later.
             meta_s = s
             meta_r = 0
+            meta_t = 0
 
         # get action from controller.
         a = agent.get_epsilon_action(s, g)
 
+        # Step the env and get extrinsic reward for the meta-controller.
         next_s, ext_r, done, _, _ = env.step(a)
-
-        int_r = agent.get_intrinsic_reward(s, a, next_s, g)
         meta_r += ext_r
+
+        # Get intrinsic reward for the controller.
+        int_r = agent.get_intrinsic_reward(s, a, next_s, g)
 
         agent.d1.add(agent.to_q1(s, g), a, int_r, agent.to_q1(next_s, g), done)
 
@@ -285,7 +296,8 @@ def _play_episode(
                 q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
                 q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
 
-        if agent.goal_satisfied(s, g):
+        timelimit_exceeded = meta_t > meta_action_timelimit if meta_action_timelimit else False
+        if agent.goal_satisfied(s, g) or timelimit_exceeded:
             # End of the meta-action.
             agent.d2.add(agent.to_q2(meta_s), g, ext_r, agent.to_q2(next_s), done)
 
@@ -314,7 +326,7 @@ def train_h_dqn_agent(
         replay_buffer_size=10**4,
         batch_size=32,
         max_grad_norm=1000,
-        eval_freq=10,
+        eval_freq=5,
         decay_start=1,
         decay_end=0.1,
         decay_steps=10**4
@@ -322,14 +334,20 @@ def train_h_dqn_agent(
     """Train the hDQN agent following the algorithm outlined by Kulkarni et al. 2016."""
     # Init graphing.
     if can_graph():
-        fig, axs = plt.subplots(1, 3, figsize=(12, 6))
+        fig, axs = plt.subplots(2, 2, figsize=(12, 12))
+        axs = np.array(axs).flatten()
+        axs1twin = axs[1].twinx()
+        axs2twin = axs[2].twinx()
+        axs = np.insert(axs, 2, axs1twin)
+        axs = np.insert(axs, 4, axs2twin)
+
     else:
         fig, axs = None, None
 
-    loss_history = np.empty(shape=(2,0))
-    grad_norm_history = np.empty(shape=(2,0))
+    loss_history = np.empty(shape=(2, 0))
+    grad_norm_history = np.empty(shape=(2, 0))
     mean_reward_history = []
-    epsilon_history = []
+    epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
 
     # Init all epsilons.
     agent.epsilon1 = np.ones(agent.n_goals)
@@ -342,7 +360,9 @@ def train_h_dqn_agent(
     s, _ = env.reset()
 
     # Init D1 & D2.
-    while len(agent.d1) < replay_buffer_size and len(agent.d2) < replay_buffer_size:
+    replay_bar = tqdm(range(replay_buffer_size))
+    replay_bar.set_description("Warming buffer")
+    while len(agent.d1) < replay_buffer_size or len(agent.d2) < replay_buffer_size:
         _play_episode(
             env=env,
             agent=agent,
@@ -353,6 +373,11 @@ def train_h_dqn_agent(
             max_timesteps=replay_buffer_size,
             learn=False
         )
+
+        replay_bar.update(len(agent.d2) - replay_bar.n)
+        replay_bar.refresh()
+
+    replay_bar.close()
 
     for ep in trange(0, num_episodes):
         ep_loss_history, ep_grad_norm_history = _play_episode(
@@ -365,16 +390,19 @@ def train_h_dqn_agent(
             max_timesteps=max_timesteps,
             learn=True,
             epsilon1_decay=epsilon1_decay,
-            epsilon2_decay=epsilon2_decay
+            epsilon2_decay=epsilon2_decay,
+            show_progress=True,
+            meta_action_timelimit=None
         )
 
-        epsilon_history.append([
-            agent.eps2,
-            *agent.eps1
-        ])
+        epsilon_history = np.append(
+            epsilon_history,
+            [[agent.eps2, *agent.eps1]],
+            axis=0
+        )
 
-        np.append(loss_history, ep_loss_history, axis=1)
-        np.append(grad_norm_history, ep_grad_norm_history, axis=1)
+        loss_history = np.append(loss_history, ep_loss_history, axis=1)
+        grad_norm_history = np.append(grad_norm_history, ep_grad_norm_history, axis=1)
 
         if ep % eval_freq == 0:
             score = evaluate(env_factory(ep), agent, n_episodes=3, max_episode_steps=1000)
@@ -382,7 +410,7 @@ def train_h_dqn_agent(
                 score
             )
 
-            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history)
+            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history)
 
 
 def hdqn_training_wrapper(
@@ -405,20 +433,37 @@ def hdqn_training_wrapper(
     )
 
 
-def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
+def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history):
     if can_graph() is False:
         return
 
     axs[0].cla()
     axs[1].cla()
     axs[2].cla()
+    axs[3].cla()
+    axs[4].cla()
+    axs[5].cla()
 
     axs[0].set_title("Mean Reward")
     axs[1].set_title("Loss")
-    axs[2].set_title("Grad Norm")
+    axs[3].set_title("Grad Norm")
+    axs[5].set_title("Epsilon")
 
     axs[0].plot(mean_reward_history)
-    axs[1].plot(smoothen(loss_history))
-    axs[2].plot(smoothen(grad_norm_history))
 
+    axs[1].plot(smoothen(loss_history[0]), color="red")
+    axs[1].set_ylabel("Q1", color="red")
+    axs[2].plot(smoothen(loss_history[1]), color="blue")
+    axs[2].set_ylabel("Q2", color="blue")
+
+    axs[3].plot(smoothen(grad_norm_history[0]), color="red")
+    axs[3].set_ylabel("Q1", color="red")
+    axs[4].plot(smoothen(grad_norm_history[1]), color="blue")
+    axs[4].set_ylabel("Q2", color="blue")
+
+    for i in range(epsilon_history.shape[1]):
+        label = "Q2" if i == 0 else f"Q1-{i}"
+        axs[5].plot(epsilon_history[:, i], label=label)
+
+    plt.tight_layout()
     plt.pause(0.05)

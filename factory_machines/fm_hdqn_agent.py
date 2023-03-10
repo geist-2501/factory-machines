@@ -7,7 +7,8 @@ from factory_machines.utils import flatten
 class FactoryMachinesHDQNAgent(HDQNAgent):
 
     def __init__(self, obs: DictObsType, n_actions: int, device: str = 'cpu') -> None:
-        super().__init__(obs, len(obs["depot_locs"]) + 1, n_actions, device=device)
+        n_goals = (len(obs["depot_locs"]) // 2) + 1
+        super().__init__(obs, n_goals, n_actions, device=device)
 
     def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:
         return 5 if self.goal_satisfied(obs, goal) else 0
