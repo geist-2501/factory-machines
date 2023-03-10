@@ -11,9 +11,9 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
 
-from factory_machines.dqn_agent import DQN
-from factory_machines.replay_buffer import ReplayBuffer
-from factory_machines.utils import can_graph, evaluate, smoothen, StaticLinearDecay, MeteredLinearDecay
+from agents.dqn_agent import DQN
+from agents.replay_buffer import ReplayBuffer
+from agents.utils import can_graph, evaluate, smoothen, StaticLinearDecay, MeteredLinearDecay
 from talos import Agent
 
 

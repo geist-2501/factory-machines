@@ -8,8 +8,8 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from factory_machines.utils import StaticLinearDecay, smoothen, can_graph, evaluate
-from factory_machines.replay_buffer import ReplayBuffer
+from agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate
+from agents.replay_buffer import ReplayBuffer
 from talos import Agent
 
 

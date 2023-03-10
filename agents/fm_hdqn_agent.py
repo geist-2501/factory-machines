@@ -1,7 +1,7 @@
 import numpy as np
 
-from factory_machines.h_dqn_agent import HDQNAgent, DictObsType, FlatObsType, ActType
-from factory_machines.utils import flatten
+from agents.h_dqn_agent import HDQNAgent, DictObsType, FlatObsType, ActType
+from agents.utils import flatten
 
 
 class FactoryMachinesHDQNAgent(HDQNAgent):
