@@ -234,6 +234,10 @@ def play(
             1,
             "--num-eps",
             "-n"
+        ),
+        opt_render: str = typer.Option(
+            "human",
+            "--render-as"
         )
 ):
     opt_env_args = _convert_to_key_value_list(opt_env_args)
@@ -251,7 +255,7 @@ def play(
             print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
             raise typer.Abort()
 
-        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='human', env_args=opt_env_args)
+        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode=opt_render, env_args=opt_env_args)
         agent, _ = create_agent(env_factory, talfile.id)
         agent.load(talfile.agent_data)
 

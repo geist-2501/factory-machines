@@ -28,9 +28,6 @@ def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
     return output_loc, np.array(depot_locs), len_x, len_y
 
 
-
-
-
 class FactoryMachinesEnvBase(gym.Env, ABC):
     metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 4}
     maps = {

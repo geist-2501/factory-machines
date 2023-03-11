@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from factory_machines.fm_hdqn_agent import FactoryMachinesHDQNAgent
+from agents.fm_hdqn_agent import FactoryMachinesHDQNAgent
 from factory_machines_env import FactoryMachinesRelativeWrapper
 from factory_machines_env_tests import MockEnv
 

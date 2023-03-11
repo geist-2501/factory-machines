@@ -14,6 +14,12 @@ register(
     max_episode_steps=300,
 )
 
+register(
+    id='DiscreteStochasticMDP-v0',
+    entry_point='factory_machines_env.envs:DiscreteStochasticMDP',
+    max_episode_steps=300,
+)
+
 register_wrapper(
     id='FMFlatten',
     wrapper_factory=lambda outer: FactoryMachinesFlattenWrapper(outer)

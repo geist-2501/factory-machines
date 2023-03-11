@@ -116,7 +116,7 @@ class HDQNAgent(Agent, ABC):
     @abstractmethod
     def to_q2(self, obs: DictObsType) -> FlatObsType:
         """Process an observation before being fed to Q2."""
-        raise NotImplementedError
+        return obs
 
     def get_action(self, obs: DictObsType, extra_state=None) -> Tuple[ActType, Any]:
         """Get the optimal action given a state."""
@@ -140,30 +140,6 @@ class HDQNAgent(Agent, ABC):
     def get_epsilon_goal(self, obs: DictObsType) -> ActType:
         """Get a goal from the meta-controller, using the epsilon greedy policy."""
         return self.get_epsilon(self.to_q2(obs), self.eps2, self.meta_cont_net)
-
-    def update_net(
-            self,
-            net: DQN,
-            net_fixed: DQN,
-            buffer: ReplayBuffer,
-            batch_size,
-            opt,
-            max_grad_norm
-    ):
-
-        (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
-
-        loss = self.compute_td_loss(s, a, r, s_dash, is_done, net, net_fixed)
-
-        # TODO I'm unsure about this. In regular DQN the fixed net is updated every K-steps.
-        net_fixed.load_state_dict(net.state_dict())
-
-        loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
-        opt.step()
-        opt.zero_grad()
-
-        return loss, grad_norm
 
     def get_epsilon(self, states: np.ndarray, epsilon: float, net: DQN) -> np.ndarray:
         states = torch.tensor(states, device=self.device, dtype=torch.float32)
@@ -189,6 +165,30 @@ class HDQNAgent(Agent, ABC):
 
             should_explore = np.random.choice([0, 1], batch_size, p=[1 - epsilon, epsilon])
             return np.where(should_explore, random_actions, best_actions)
+
+    def update_net(
+            self,
+            net: DQN,
+            net_fixed: DQN,
+            buffer: ReplayBuffer,
+            batch_size,
+            opt,
+            max_grad_norm
+    ):
+
+        (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
+
+        loss = self.compute_td_loss(s, a, r, s_dash, is_done, net, net_fixed)
+
+        # TODO I'm unsure about this. In regular DQN the fixed net is updated every K-steps.
+        net_fixed.load_state_dict(net.state_dict())
+
+        loss.backward()
+        grad_norm = nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
+        opt.step()
+        opt.zero_grad()
+
+        return loss, grad_norm
 
     def save(self) -> Dict:
         return {
@@ -347,7 +347,7 @@ def train_h_dqn_agent(
     loss_history = np.empty(shape=(2, 0))
     grad_norm_history = np.empty(shape=(2, 0))
     mean_reward_history = []
-    epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
+    epsilon_history = np.empty(shape=(0, agent.n_goals))
 
     # Init all epsilons.
     agent.epsilon1 = np.ones(agent.n_goals)
@@ -397,7 +397,7 @@ def train_h_dqn_agent(
 
         epsilon_history = np.append(
             epsilon_history,
-            [[agent.eps2, *agent.eps1]],
+            [agent.eps1],
             axis=0
         )
 
@@ -429,7 +429,8 @@ def hdqn_training_wrapper(
         batch_size=dqn_config.getint("batch_size"),
         decay_start=dqn_config.getfloat("init_epsilon"),
         decay_end=dqn_config.getfloat("final_epsilon"),
-        decay_steps=dqn_config.getfloat("decay_steps")
+        decay_steps=dqn_config.getfloat("decay_steps"),
+        eval_freq=dqn_config.getint("eval_freq")
     )
 
 
@@ -462,8 +463,10 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     axs[4].set_ylabel("Q2", color="blue")
 
     for i in range(epsilon_history.shape[1]):
-        label = "Q2" if i == 0 else f"Q1-{i}"
+        label = f"Q1-{i}"
         axs[5].plot(epsilon_history[:, i], label=label)
+
+    axs[5].legend()
 
     plt.tight_layout()
     plt.pause(0.05)

@@ -1,2 +1,3 @@
 from factory_machines_env.envs.fm_env_multi import FactoryMachinesEnvMulti
 from factory_machines_env.envs.fm_env_single import FactoryMachinesEnvSingle
+from factory_machines_env.envs.discrete_stochastic_mdp import DiscreteStochasticMDP
