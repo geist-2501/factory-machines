@@ -120,8 +120,9 @@ def train(
     if typer.confirm("Ready to proceed?", default=True) is False:
         return
 
+    training_artifacts = {}
     try:
-        training_wrapper(env_factory, agent, agent_config)
+        training_wrapper(env_factory, agent, agent_config, training_artifacts)
     except KeyboardInterrupt:
         print("[bold red]Training interrupted[/bold red].")
 
@@ -133,7 +134,13 @@ def train(
                 path = typer.prompt("Enter a path to save to")
             print(f"Saving agent to disk ([italic]{path}[/]) ...")
             data = agent.save()
-            talfile = TalFile(opt_agent, 0, 0, [], data, opt_wrapper, opt_env)
+            talfile = TalFile(
+                id=opt_agent,
+                env_name=opt_env,
+                agent_data=data,
+                training_artifacts=training_artifacts,
+                used_wrappers=opt_wrapper
+            )
             talfile.write(path)
         except OSError as ex:
             print("[bold red]Saving failed![/] " + ex.strerror)

@@ -321,10 +321,11 @@ def _play_episode(
 def train_h_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
+        artifacts: Dict,
         opt1: torch.optim.Optimizer,
         q1_hidden_layers,
-        q2_hidden_layers,
         opt2: torch.optim.Optimizer,
+        q2_hidden_layers,
         num_episodes: int = 100,
         max_timesteps=1000,
         replay_buffer_size=10**4,
@@ -350,15 +351,15 @@ def train_h_dqn_agent(
     loss_history = np.empty(shape=(2, 0))
     grad_norm_history = np.empty(shape=(2, 0))
     mean_reward_history = []
-    epsilon_history = np.empty(shape=(0, agent.n_goals))
+    epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
 
     # Init the network shapes.
     agent.set_q2_layers(q2_hidden_layers)
     agent.set_q1_layers(q1_hidden_layers)
 
     # Init all epsilons.
-    agent.epsilon1 = np.ones(agent.n_goals)
-    agent.epsilon2 = 1
+    agent.eps1 = np.ones(agent.n_goals)
+    agent.eps2 = 1
 
     epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps // agent.n_goals) for _ in range(agent.n_goals)]
     epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
@@ -408,7 +409,7 @@ def train_h_dqn_agent(
 
         epsilon_history = np.append(
             epsilon_history,
-            [agent.eps1],
+            [[agent.eps2, *agent.eps1]],
             axis=0
         )
 
@@ -423,17 +424,24 @@ def train_h_dqn_agent(
 
             _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history)
 
+            artifacts["loss"] = loss_history
+            artifacts["grad_norm"] = grad_norm_history
+            artifacts["mean_reward"] = mean_reward_history
+            artifacts["epsilon"] = epsilon_history
+
             tqdm.write(f"Timesteps: {timekeeper.steps}, meta steps: {timekeeper.meta_steps}")
 
 
 def hdqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
-        dqn_config: configparser.SectionProxy
+        dqn_config: configparser.SectionProxy,
+        artifacts: Dict
 ):
     train_h_dqn_agent(
         env_factory=env_factory,
         agent=agent,
+        artifacts=artifacts,
         opt1=torch.optim.NAdam(agent.q1_params(), lr=dqn_config.getfloat("learning_rate")),
         opt2=torch.optim.NAdam(agent.q2_params(), lr=dqn_config.getfloat("learning_rate")),
         num_episodes=dqn_config.getint("num_episodes"),
@@ -478,7 +486,7 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     axs[4].set_ylabel("Q2", color="blue")
 
     for i in range(epsilon_history.shape[1]):
-        label = f"Q1-{i}"
+        label = "Q2" if i == 0 else f"Q1-{i-1}"
         axs[5].plot(epsilon_history[:, i], label=label)
 
     axs[5].legend()
