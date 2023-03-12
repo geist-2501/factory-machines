@@ -1,18 +1,18 @@
 from typing import Optional, List, Dict
 
-import gym
 import typer
 from rich import print
 from gym.utils.play import play as gym_play
 from gym.wrappers import RecordVideo
-from talos.registration import agent_registry, wrapper_registry
-from talos.config import app as config_app
+from talos.cli.config import app as config_app
+from talos.cli.list import app as list_app
 from talos.error import *
 from talos.core import play_agent, evaluate_agents, load_config, create_env_factory, get_device, create_agent
 from talos.file import TalFile, read_talfile
 
 app = typer.Typer()
 app.add_typer(config_app, name="config")
+app.add_typer(list_app, name="list")
 
 __app_name__ = "talos"
 __version__ = "0.1.0"
@@ -59,20 +59,6 @@ def main(
     )
 ) -> None:
     return
-
-
-@app.command("list")
-def list_all():
-    """List all registered agents and wrappers."""
-    print("[bold]Currently registered agents[/]:")
-    for agent in agent_registry.keys():
-        print(" " + agent)
-    print("\n[bold]Currently registered wrappers[/]:")
-    for wrapper in wrapper_registry.keys():
-        print(" " + wrapper)
-    print("\n[bold]Currently registered environments[/]:")
-    for env in gym.envs.registry.keys():
-        print(" " + env)
 
 
 @app.command()
