@@ -31,12 +31,17 @@ class DQN(nn.Module):
         """
         Set the configuration of the hidden layers.
         Each integer in the list is the number of neurons in each layer.
+        Must be done *before* the optimiser is created!
         """
         self.hidden_layers = hidden_layers
         self.net = self._build_net(self.get_layers()).to(self.device)
 
     def get_epsilon(self, states: torch.Tensor, epsilon: float) -> Union[np.ndarray, int]:
-
+        """
+        Pick an action according to an epsilon policy.
+        For batches, it returns a numpy array of actions.
+        For single instances, it returns an int action.
+        """
         with torch.no_grad():
             qvalues = self.forward(states)
 
@@ -75,11 +80,11 @@ class DQN(nn.Module):
 
 
 def compute_td_loss(
-        states: torch.Tensor,
-        actions: torch.Tensor,
-        rewards: torch.Tensor,
-        next_states: torch.Tensor,
-        is_done: torch.Tensor,
+        states: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        next_states: np.ndarray,
+        is_done: np.ndarray,
         gamma: float,
         net: DQN,
         net_fixed: DQN
@@ -88,6 +93,16 @@ def compute_td_loss(
     Compute the temporal difference loss for a batch of observations.
     According to formula $$[(r + gamma max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
     """
+
+    states = torch.tensor(states, device=net.device, dtype=torch.float32)
+    actions = torch.tensor(actions, device=net.device, dtype=torch.int64)
+    rewards = torch.tensor(rewards, device=net.device, dtype=torch.float32)
+    next_states = torch.tensor(next_states, device=net.device, dtype=torch.float)
+    is_done = torch.tensor(
+        is_done.astype('bool'),
+        device=net.device,
+        dtype=torch.bool,
+    )
 
     predicted_qvalues = net(states)
 

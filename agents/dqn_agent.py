@@ -5,7 +5,6 @@ from typing import Callable, Dict, Tuple, Any, List
 import gym
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
@@ -16,6 +15,10 @@ from talos import Agent
 
 
 class DQNAgent(Agent):
+    """
+    Deep Q-Network agent.
+    Uses the technique described in Minh et al. in 'Playing Atari with Deep Reinforcement Learning'.
+    """
     def __init__(self, obs, n_actions, device='cpu'):
         super().__init__("DQN")
         self.epsilon = 1
@@ -43,53 +46,19 @@ class DQNAgent(Agent):
             next_states: np.ndarray,
             is_done: np.ndarray
     ) -> torch.Tensor:
-        states = torch.tensor(states, device=self.device, dtype=torch.float32)
-        actions = torch.tensor(actions, device=self.device, dtype=torch.int64)
-        rewards = torch.tensor(rewards, device=self.device, dtype=torch.float32)
-        next_states = torch.tensor(next_states, device=self.device, dtype=torch.float)
-        is_done = torch.tensor(
-            is_done.astype('bool'),
-            device=self.device,
-            dtype=torch.bool,
+        return compute_td_loss(
+            states,
+            actions,
+            rewards,
+            next_states,
+            is_done,
+            self.gamma,
+            self.net,
+            self.target_net
         )
 
-        # get q-values for all actions in current states
-        predicted_qvalues = self.net(states)  # shape: [batch_size, n_actions]
-
-        # compute q-values for all actions in next states
-        predicted_next_qvalues = self.target_net(next_states)  # shape: [batch_size, n_actions]
-
-        # select q-values for chosen actions
-        predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]  # shape: [batch_size]
-
-        # compute V*(next_states) using predicted next q-values
-        next_state_values, _ = torch.max(predicted_next_qvalues, dim=1)
-
-        # compute "target q-values" for loss - it's what's inside square parentheses in the above formula.
-        # at the last state use the simplified formula: Q(s,a) = r(s,a) since s' doesn't exist
-        # you can multiply next state values by is_not_done to achieve this.
-        target_qvalues_for_actions = rewards + self.gamma * next_state_values
-        target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
-
-        # mean squared error loss to minimize
-        loss = F.mse_loss(target_qvalues_for_actions, predicted_qvalues_for_actions)
-
-        return loss
-
-        # return compute_td_loss(
-        #     states,
-        #     actions,
-        #     rewards,
-        #     next_states,
-        #     is_done,
-        #     self.gamma,
-        #     self.net,
-        #     self.target_net
-        # )
-
     def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
-        return self.get_optimal_actions(np.array([state]))[0], extra_state
-        # return self.get_optimal_actions(state), extra_state
+        return self.get_optimal_actions(state), extra_state
 
     def get_epsilon_actions(self, states: np.ndarray):
         """Pick actions according to an epsilon greedy strategy."""
@@ -102,20 +71,7 @@ class DQNAgent(Agent):
     def _get_actions(self, states: np.ndarray, epsilon: float):
         """Pick actions according to an epsilon greedy strategy."""
         states = torch.tensor(states, device=self.device, dtype=torch.float32)
-        self.net.eval()
-        with torch.no_grad():
-            qvalues = self.forward(states)
-        self.net.train()
-
-        batch_size, n_actions = qvalues.shape
-
-        random_actions = np.random.choice(n_actions, size=batch_size)
-        best_actions = qvalues.argmax(axis=-1).cpu()
-
-        should_explore = np.random.choice([0, 1], batch_size, p=[1 - epsilon, epsilon])
-        return np.where(should_explore, random_actions, best_actions)
-
-        # return self.net.get_epsilon(states, epsilon)
+        return self.net.get_epsilon(states, epsilon)
 
     def parameters(self):
         return self.net.parameters()
@@ -178,7 +134,7 @@ def train_dqn_agent(
         agent: DQNAgent,
         hidden_layers: List[int],
         artifacts: Dict,
-        opt: torch.optim.Optimizer,
+        learning_rate: float = 1e-4,
         epsilon_decay: StaticLinearDecay = StaticLinearDecay(1, 0.1, 1 * 10 ** 4),
         max_steps: int = 4 * 10 ** 4,
         timesteps_per_epoch=1,
@@ -193,6 +149,8 @@ def train_dqn_agent(
     state, _ = env.reset()
 
     agent.set_hidden_layers(hidden_layers)
+
+    opt = torch.optim.NAdam(agent.parameters(), lr=learning_rate)
 
     # Create buffer and fill it with experiences.
     buffer = ReplayBuffer(replay_buffer_size)
@@ -282,7 +240,7 @@ def dqn_training_wrapper(
         agent=agent,
         hidden_layers=parse_int_list(dqn_config.get("hidden_layers")),
         artifacts=artifacts,
-        opt=torch.optim.NAdam(agent.parameters(), lr=dqn_config.getfloat("learning_rate")),
+        learning_rate=dqn_config.getfloat("learning_rate"),
         epsilon_decay=StaticLinearDecay(
             start_value=dqn_config.getfloat("init_epsilon"),
             final_value=dqn_config.getfloat("final_epsilon"),
