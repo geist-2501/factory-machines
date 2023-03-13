@@ -1,5 +1,6 @@
 import configparser
-from typing import Callable, Dict, Tuple, Any
+from operator import itemgetter
+from typing import Callable, Dict, Tuple, Any, List
 
 import gym
 import torch
@@ -8,38 +9,24 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate
+from agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list
 from agents.replay_buffer import ReplayBuffer
+from agents.dqn import DQN, compute_td_loss
 from talos import Agent
 
 
-class DQN(nn.Module):
-    def __init__(self, state_dim: int, n_actions: int) -> None:
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(state_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, n_actions)
-        )
-
-    def forward(self, states):
-        return self.net(states)
-
-
 class DQNAgent(Agent):
-    def __init__(self, obs, n_actions, epsilon=0, gamma=0.99, device='cpu'):
+    def __init__(self, obs, n_actions, device='cpu'):
         super().__init__("DQN")
-        self.epsilon = epsilon
-        self.gamma = gamma
+        self.epsilon = 1
+        self.gamma = 0.99
         self.n_actions = n_actions
         self.device = device
 
         # Init both networks.
         obs_size = len(obs)
-        self.net = DQN(obs_size, n_actions).to(device)
-        self.target_net = DQN(obs_size, n_actions).to(device)
+        self.net = DQN(obs_size, n_actions, device=device)
+        self.target_net = DQN(obs_size, n_actions, device=device)
         self.target_net.load_state_dict(self.net.state_dict())
 
     def forward(self, state):
@@ -89,8 +76,20 @@ class DQNAgent(Agent):
 
         return loss
 
+        # return compute_td_loss(
+        #     states,
+        #     actions,
+        #     rewards,
+        #     next_states,
+        #     is_done,
+        #     self.gamma,
+        #     self.net,
+        #     self.target_net
+        # )
+
     def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
         return self.get_optimal_actions(np.array([state]))[0], extra_state
+        # return self.get_optimal_actions(state), extra_state
 
     def get_epsilon_actions(self, states: np.ndarray):
         """Pick actions according to an epsilon greedy strategy."""
@@ -116,15 +115,26 @@ class DQNAgent(Agent):
         should_explore = np.random.choice([0, 1], batch_size, p=[1 - epsilon, epsilon])
         return np.where(should_explore, random_actions, best_actions)
 
+        # return self.net.get_epsilon(states, epsilon)
+
     def parameters(self):
         return self.net.parameters()
 
     def save(self) -> Dict:
-        return self.net.state_dict()
+        return {
+            "data": self.net.state_dict(),
+            "layers": self.net.hidden_layers
+        }
 
     def load(self, agent_data: Dict):
-        self.net.load_state_dict(agent_data)
-        self.target_net.load_state_dict(agent_data)
+        data, layers = itemgetter("data", "layers")(agent_data)
+        self.net.set_hidden_layers(layers)
+        self.net.load_state_dict(data)
+        self.target_net.load_state_dict(data)
+
+    def set_hidden_layers(self, hidden_layers: List[int]):
+        self.net.set_hidden_layers(hidden_layers)
+        self.target_net.set_hidden_layers(hidden_layers)
 
 
 def _play_into_buffer(
@@ -166,6 +176,7 @@ def _play_into_buffer(
 def train_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
+        hidden_layers: List[int],
         artifacts: Dict,
         opt: torch.optim.Optimizer,
         epsilon_decay: StaticLinearDecay = StaticLinearDecay(1, 0.1, 1 * 10 ** 4),
@@ -180,6 +191,8 @@ def train_dqn_agent(
 ):
     env = env_factory(0)
     state, _ = env.reset()
+
+    agent.set_hidden_layers(hidden_layers)
 
     # Create buffer and fill it with experiences.
     buffer = ReplayBuffer(replay_buffer_size)
@@ -196,11 +209,14 @@ def train_dqn_agent(
     else:
         fig, axs = None, None
 
-    # TODO add artifacts.
-
     mean_reward_history = []
     loss_history = []
     grad_norm_history = []
+
+    artifacts["reward"] = mean_reward_history
+    artifacts["loss"] = loss_history
+    artifacts["grad_norm"] = grad_norm_history
+
     for step in trange(0, max_steps):
 
         agent.epsilon = epsilon_decay.get(step)
@@ -264,6 +280,7 @@ def dqn_training_wrapper(
     train_dqn_agent(
         env_factory=env_factory,
         agent=agent,
+        hidden_layers=parse_int_list(dqn_config.get("hidden_layers")),
         artifacts=artifacts,
         opt=torch.optim.NAdam(agent.parameters(), lr=dqn_config.getfloat("learning_rate")),
         epsilon_decay=StaticLinearDecay(
@@ -276,5 +293,6 @@ def dqn_training_wrapper(
         batch_size=dqn_config.getint("batch_size"),
         update_target_net_freq=dqn_config.getint("refresh_target_network_freq"),
         evaluation_freq=dqn_config.getint("eval_freq"),
+        gather_freq=dqn_config.getint("gather_freq"),
         replay_buffer_size=dqn_config.getint("replay_buffer_size")
     )

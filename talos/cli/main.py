@@ -130,56 +130,12 @@ def train(
                 env_name=opt_env,
                 agent_data=data,
                 training_artifacts=training_artifacts,
-                used_wrappers=opt_wrapper
+                used_wrappers=opt_wrapper,
+                config=dict(agent_config)
             )
             talfile.write(path)
         except OSError as ex:
             print("[bold red]Saving failed![/] " + ex.strerror)
-
-
-@app.command()
-def compare(
-        opt_agent_talfiles: List[str] = typer.Option(
-            ["DQN.tal"],
-            "--talfile",
-            "-t",
-            prompt="Enter the .tal files for the agents you'd like to compare"
-        ),
-        opt_env: str = typer.Option(
-            "CartPole-v1",
-            "--env",
-            "-e",
-            prompt="Environment to evaluate in?"
-        ),
-        opt_wrapper: str = typer.Option(
-            None,
-            "--wrapper",
-            "-w"
-        ),
-):
-    env_factory = create_env_factory(opt_env, opt_wrapper)
-
-    agents = []
-    for agent_talfile in opt_agent_talfiles:
-        print(f" > {agent_talfile}... ", end="")
-        try:
-            talfile = read_talfile(agent_talfile)
-            agent, _ = create_agent(env_factory, talfile.id)
-            agent.load(talfile.agent_data)
-            agents.append(agent)
-            print("[bold green]success![/]")
-        except TalfileLoadError:
-            print("[bold red]failed![/] Couldn't load .tal file.")
-        except AgentNotFound:
-            print("[bold red]failed![/] Couldn't find agent definition. Make sure it's been registered.")
-
-    if len(agents) == len(opt_agent_talfiles):
-        should_continue = typer.confirm("All agents loaded, ready to proceed?", default=True)
-    else:
-        should_continue = typer.confirm("Only some agents loaded, ready to proceed?", default=False)
-
-    if should_continue:
-        evaluate_agents(agents, opt_agent_talfiles, env_factory)
 
 
 @app.command()

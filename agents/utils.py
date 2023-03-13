@@ -78,3 +78,8 @@ def flatten(obs: Dict) -> List:
         *obs["depot_queues"],
         *obs["output_loc"],
     ]
+
+
+def parse_int_list(raw: str) -> List[int]:
+    parts = raw.split(",")
+    return list(map(lambda part: int(part), parts))

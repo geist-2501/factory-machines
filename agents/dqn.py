@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import torch
@@ -8,32 +8,34 @@ from torch import nn
 
 class DQN(nn.Module):
     """A configurable Deep Q-Network."""
-    def __init__(self, state_dim: int, n_actions: int, hidden_layers=None) -> None:
+    def __init__(self, state_dim: int, n_actions: int, hidden_layers=None, device='cpu') -> None:
         super().__init__()
 
         if hidden_layers is None:
             hidden_layers = []
 
-        self._layers = [state_dim, *hidden_layers, n_actions]
-        self.net = nn.Sequential()
-        for i in range(len(self._layers) - 1):
-            is_first = i == 0
-            if not is_first:
-                self.net.append(nn.ReLU())
+        self.device = device
 
-            in_dim = self._layers[i]
-            out_dim = self._layers[i + 1]
-            self.net.append(nn.Linear(in_dim, out_dim))
-
-        self.net.modules()
+        self.in_size = state_dim
+        self.out_size = n_actions
+        self.hidden_layers = hidden_layers
+        self.net = self._build_net(self.get_layers()).to(self.device)
 
     def forward(self, states):
         return self.net(states)
 
     def get_layers(self):
-        return self._layers
+        return [self.in_size, *self.hidden_layers, self.out_size]
 
-    def get_epsilon(self, states: torch.Tensor, epsilon: float) -> np.ndarray:
+    def set_hidden_layers(self, hidden_layers: List[int]):
+        """
+        Set the configuration of the hidden layers.
+        Each integer in the list is the number of neurons in each layer.
+        """
+        self.hidden_layers = hidden_layers
+        self.net = self._build_net(self.get_layers()).to(self.device)
+
+    def get_epsilon(self, states: torch.Tensor, epsilon: float) -> Union[np.ndarray, int]:
 
         with torch.no_grad():
             qvalues = self.forward(states)
@@ -56,6 +58,20 @@ class DQN(nn.Module):
 
             should_explore = np.random.choice([0, 1], batch_size, p=[1 - epsilon, epsilon])
             return np.where(should_explore, random_actions, best_actions)
+
+    @staticmethod
+    def _build_net(layers: List[int]) -> nn.Sequential:
+        net = nn.Sequential()
+        for i in range(len(layers) - 1):
+            is_first = i == 0
+            if not is_first:
+                net.append(nn.ReLU())
+
+            in_dim = layers[i]
+            out_dim = layers[i + 1]
+            net.append(nn.Linear(in_dim, out_dim))
+
+        return net
 
 
 def compute_td_loss(

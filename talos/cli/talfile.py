@@ -2,6 +2,7 @@ from typing import List, Optional
 
 import typer
 from gym.wrappers import RecordVideo
+from rich import print
 
 from talos.cli.cli_utils import _convert_to_key_value_list
 from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents
@@ -20,8 +21,17 @@ def doc():
 @talfile_app.command()
 def view(path: str):
     """View the metadata of a talfile"""
-    # TODO
-    raise NotImplementedError
+    try:
+        talfile = read_talfile(path)
+    except TalfileLoadError as ex:
+        print(f"Couldn't load talfile {path}, " + str(ex))
+        raise typer.Abort()
+
+    print(f"[bold white]Agent name[/]:       {talfile.id}")
+    print(f"[bold white]Environment used[/]: {talfile.env_name}")
+    print(f"[bold white]Wrapper used[/]:     {talfile.used_wrappers}")
+    print("[bold white]Configuration used[/]:")
+    print(talfile.config)
 
 
 @talfile_app.command()
@@ -69,6 +79,16 @@ def replay(
     except TalfileLoadError as ex:
         print(f"Couldn't load talfile {path}, " + str(ex))
         raise typer.Abort()
+
+    if opt_env is None:
+        opt_env = talfile.env_name
+    else:
+        print(f"Overwriting environment specified in talfile ({talfile.env_name}) with {opt_env}")
+
+    if opt_wrapper is None:
+        opt_wrapper = talfile.used_wrappers
+    else:
+        print(f"Overwriting wrapper specified in talfile ({talfile.used_wrappers}) with {opt_wrapper}")
 
     env_factory = create_env_factory(opt_env, opt_wrapper, render_mode=opt_render, env_args=opt_env_args)
     agent, _ = create_agent(env_factory, talfile.id)
