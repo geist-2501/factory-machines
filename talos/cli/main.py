@@ -1,18 +1,21 @@
-from typing import Optional, List, Dict
+from typing import Optional, List
 
 import typer
-from rich import print
 from gym.utils.play import play as gym_play
-from gym.wrappers import RecordVideo
+from rich import print
+
+from talos.cli.cli_utils import _convert_to_key_value_list
 from talos.cli.config import app as config_app
 from talos.cli.list import app as list_app
+from talos.cli.talfile import talfile_app
+from talos.core import evaluate_agents, load_config, create_env_factory, get_device, create_agent
 from talos.error import *
-from talos.core import play_agent, evaluate_agents, load_config, create_env_factory, get_device, create_agent
 from talos.file import TalFile, read_talfile
 
 app = typer.Typer()
 app.add_typer(config_app, name="config")
 app.add_typer(list_app, name="list")
+app.add_typer(talfile_app, name="talfile")
 
 __app_name__ = "talos"
 __version__ = "0.1.0"
@@ -33,18 +36,6 @@ def _version_callback(value: bool) -> None:
   RL agent training assistant""")
         print(f"[bold green]  v{__version__}[/]")
         raise typer.Exit()
-
-
-def _convert_to_key_value_list(args: List[str]) -> Dict[str, str]:
-
-    key_values = {}
-    for arg in args:
-        parts = arg.split('=')
-        assert len(parts) == 2
-        key, value = parts
-        key_values[key] = value
-
-    return key_values
 
 
 @app.callback()
@@ -193,21 +184,14 @@ def compare(
 
 @app.command()
 def play(
-        opt_agent_talfile: str = typer.Option(
-            "DQN.tal",
-            "--talfile",
-            "-t",
-            prompt="Location of the agent's talfile?"
+        arg_env: str = typer.Argument(
+            "CartPole-v1",
+            help="The environment to play in"
         ),
         opt_wrapper: str = typer.Option(
             None,
             "--wrapper",
             "-w"
-        ),
-        opt_env: str = typer.Option(
-            None,
-            "--env",
-            "-e",
         ),
         opt_seed: int = typer.Option(
             None,
@@ -217,58 +201,11 @@ def play(
         opt_env_args: List[str] = typer.Option(
             [],
             "--env-arg",
-        ),
-        opt_save_to: Optional[str] = typer.Option(
-            None,
-            "--save-to",
-            "-s"
-        ),
-        opt_num_eps: int = typer.Option(
-            1,
-            "--num-eps",
-            "-n"
-        ),
-        opt_render: str = typer.Option(
-            "human",
-            "--render-as"
         )
 ):
+    """Play the environment as a human. (Not for procrastination!)"""
     opt_env_args = _convert_to_key_value_list(opt_env_args)
 
-    if opt_agent_talfile == "me":
-        if opt_env is None:
-            opt_env = typer.prompt("Environment to play in?", default="CartPole-v1")
-        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode='rgb_array', env_args=opt_env_args)
-        env = env_factory(opt_seed)
-        gym_play(env)
-    else:
-        try:
-            talfile = read_talfile(opt_agent_talfile)
-        except TalfileLoadError as ex:
-            print(f"Couldn't load talfile {opt_agent_talfile}, " + str(ex))
-            raise typer.Abort()
-
-        env_factory = create_env_factory(opt_env, opt_wrapper, render_mode=opt_render, env_args=opt_env_args)
-        agent, _ = create_agent(env_factory, talfile.id)
-        agent.load(talfile.agent_data)
-
-        env = env_factory(opt_seed)
-
-        if opt_save_to:
-            file_prefix = f"{agent.name}-{opt_env}"
-            print(f"Recording to {opt_save_to}/{file_prefix}")
-            env = RecordVideo(
-                env=env,
-                video_folder=opt_save_to,
-                episode_trigger=lambda ep_num: True,
-                name_prefix=file_prefix
-            )
-
-        try:
-            for _ in range(opt_num_eps):
-                play_agent(agent, env, wait_time=0.5)
-        except KeyboardInterrupt:
-            env.close()
-            raise typer.Abort()
-
-        env.close()
+    env_factory = create_env_factory(arg_env, opt_wrapper, render_mode='rgb_array', env_args=opt_env_args)
+    env = env_factory(opt_seed)
+    gym_play(env)

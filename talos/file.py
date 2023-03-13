@@ -1,4 +1,4 @@
-from typing import List, Any, Dict
+from typing import Any, Dict
 from dataclasses import dataclass
 
 import torch
@@ -11,6 +11,7 @@ class TalFile:
     agent_data: Any
 
     training_artifacts: Dict
+    config: Dict
     used_wrappers: str = None
     env_name: str = None
 
@@ -20,6 +21,7 @@ class TalFile:
                 "id": self.id,
                 "agent_data": self.agent_data,
                 "training_artifacts": self.training_artifacts,
+                "config": self.config,
                 "used_wrappers": self.used_wrappers,
                 "env_name": self.env_name
             }, file)

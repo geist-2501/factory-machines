@@ -1,16 +1,13 @@
 import configparser
 import time
-from typing import List, Callable
+from typing import List, Dict
 
 import gym
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
 
 from talos.agent import Agent
 from talos.error import *
 from talos.registration import get_agent, get_wrapper
-import talos.util as utils
 
 
 def play_agent(
@@ -43,31 +40,32 @@ def play_agent(
     return reward_history, info_history
 
 
-def evaluate_agents(agents: List[Agent], agent_names: List[str], env_factory: Callable[[int], gym.Env]):
-    reward_histories = []
-    info_histories = []
-    env_name = None
-    for agent in agents:
-        env = env_factory(0)
-        env_name = type(env).__name__
-        rewards, infos = play_agent(agent, env)
-        reward_histories.append(rewards)
-        info_histories.append(infos)
-
-    reward_histories = utils.pad(reward_histories)
-
-    fig, axs = plt.subplots(1, 2, figsize=(8, 4))
-    for i in range(len(agents)):
-        axs[0].plot(np.cumsum(reward_histories[i]), label=agent_names[i])
-    axs[1].bar(agent_names, np.sum(reward_histories, axis=1))
-
-    axs[0].legend()
-    axs[0].set_ylabel("Accumulated Reward")
-    axs[1].set_ylabel("Final Reward")
-    fig.suptitle(f"{' vs '.join(agent_names)} in {env_name}")
-    fig.tight_layout()
-
-    plt.show()
+def evaluate_agents(loaded_agents: List[Dict]):
+    raise NotImplementedError
+    # reward_histories = []
+    # info_histories = []
+    # env_name = None
+    # for agent in loaded_agents:
+    #     env = env_factory(0)
+    #     env_name = type(env).__name__
+    #     rewards, infos = play_agent(agent, env)
+    #     reward_histories.append(rewards)
+    #     info_histories.append(infos)
+    #
+    # reward_histories = utils.pad(reward_histories)
+    #
+    # fig, axs = plt.subplots(1, 2, figsize=(8, 4))
+    # for i in range(len(agents)):
+    #     axs[0].plot(np.cumsum(reward_histories[i]), label=agent_names[i])
+    # axs[1].bar(agent_names, np.sum(reward_histories, axis=1))
+    #
+    # axs[0].legend()
+    # axs[0].set_ylabel("Accumulated Reward")
+    # axs[1].set_ylabel("Final Reward")
+    # fig.suptitle(f"{' vs '.join(agent_names)} in {env_name}")
+    # fig.tight_layout()
+    #
+    # plt.show()
 
 
 def load_config(config_path: str) -> configparser.ConfigParser:
