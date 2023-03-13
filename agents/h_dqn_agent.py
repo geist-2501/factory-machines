@@ -12,7 +12,7 @@ from tqdm import trange, tqdm
 
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer
-from agents.utils import can_graph, evaluate, smoothen, StaticLinearDecay, MeteredLinearDecay
+from agents.utils import can_graph, evaluate, smoothen, StaticLinearDecay, MeteredLinearDecay, parse_int_list
 from talos import Agent
 
 
@@ -29,19 +29,21 @@ class TimeKeeper:
 
 
 class HDQNAgent(Agent, ABC):
+    """
+    Hierarchical Deep Q-Network agent.
+    """
 
     def __init__(
             self,
             obs: DictObsType,
             n_goals: int,
             n_actions: int,
-            gamma: float = 0.99,
             device: str = 'cpu'
     ) -> None:
         super().__init__("h-DQN")
 
         self.device = device
-        self.gamma = gamma
+        self.gamma = 0.99
 
         self.eps1 = np.ones(n_goals)
         self.eps2 = 1
@@ -57,12 +59,12 @@ class HDQNAgent(Agent, ABC):
         self._q1_obs_size = len(self.to_q1(obs, 0))
 
         # Meta-controller Q network / Q2.
-        self.q2_net = DQN(self._q2_obs_size, self.n_goals).to(self.device)
-        self.q2_net_fixed = DQN(self._q2_obs_size, self.n_goals).to(self.device)
+        self.q2_net = DQN(self._q2_obs_size, self.n_goals, device=device)
+        self.q2_net_fixed = DQN(self._q2_obs_size, self.n_goals, device=device)
 
         # Controller Q network / Q1.
-        self.q1_net = DQN(self._q1_obs_size, self.n_actions).to(self.device)
-        self.q1_net_fixed = DQN(self._q1_obs_size, self.n_actions).to(self.device)
+        self.q1_net = DQN(self._q1_obs_size, self.n_actions, device=device)
+        self.q1_net_fixed = DQN(self._q1_obs_size, self.n_actions, device=device)
 
     def set_replay_buffer_size(self, size):
         self.d1 = ReplayBuffer(size)
@@ -78,16 +80,6 @@ class HDQNAgent(Agent, ABC):
             net: DQN,
             net_fixed: DQN
     ):
-        states = torch.tensor(states, device=self.device, dtype=torch.float32)
-        actions = torch.tensor(actions, device=self.device, dtype=torch.int64)
-        rewards = torch.tensor(rewards, device=self.device, dtype=torch.float32)
-        next_states = torch.tensor(next_states, device=self.device, dtype=torch.float)
-        is_done = torch.tensor(
-            is_done.astype('bool'),
-            device=self.device,
-            dtype=torch.bool,
-        )
-
         return compute_td_loss(states, actions, rewards, next_states, is_done, self.gamma, net, net_fixed)
 
     @abstractmethod
@@ -149,6 +141,8 @@ class HDQNAgent(Agent, ABC):
 
         loss = self.get_loss(s, a, r, s_dash, is_done, net, net_fixed)
 
+        net_fixed.load_state_dict(net.state_dict())
+
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
         opt.step()
@@ -159,16 +153,14 @@ class HDQNAgent(Agent, ABC):
     def save(self) -> Dict:
         return {
             "q2_data": self.q2_net.state_dict(),
-            "q2_layers": self.q2_net.get_layers(),
+            "q2_layers": self.q2_net.hidden_layers,
             "q1_data": self.q1_net.state_dict(),
-            "q1_layers": self.q2_net.get_layers()
+            "q1_layers": self.q2_net.hidden_layers
         }
 
     def load(self, agent_data: Dict):
         q2_layers, q1_layers = itemgetter("q2_layers", "q1_layers")(agent_data)
-
-        self.set_q1_layers(q1_layers[1:-1])
-        self.set_q2_layers(q2_layers[1:-1])
+        self.set_hidden_layers(q1_layers, q2_layers)
 
         q2_data, q1_data = itemgetter("q2_data", "q1_data")(agent_data)
 
@@ -178,20 +170,8 @@ class HDQNAgent(Agent, ABC):
         self.q1_net.load_state_dict(q1_data)
         self.q1_net_fixed.load_state_dict(q1_data)
 
-    @staticmethod
-    def _onehot(category, n_categories):
-        return [1 if i == category else 0 for i in range(n_categories)]
-
-    def set_q1_layers(self, hidden_layers):
-        self.q1_net = DQN(self._q1_obs_size, self.n_actions, hidden_layers).to(self.device)
-        self.q1_net_fixed = DQN(self._q1_obs_size, self.n_actions, hidden_layers).to(self.device)
-
     def update_q1_fixed(self):
         self.q1_net_fixed.load_state_dict(self.q1_net.state_dict())
-
-    def set_q2_layers(self, hidden_layers):
-        self.q2_net = DQN(self._q2_obs_size, self.n_goals, hidden_layers).to(self.device)
-        self.q2_net_fixed = DQN(self._q2_obs_size, self.n_goals, hidden_layers).to(self.device)
 
     def update_q2_fixed(self):
         self.q2_net_fixed.load_state_dict(self.q2_net.state_dict())
@@ -201,6 +181,17 @@ class HDQNAgent(Agent, ABC):
 
     def q2_params(self):
         return self.q2_net.parameters()
+
+    def set_hidden_layers(self, q1_hidden_layers: List[int], q2_hidden_layers: List[int]):
+        self.q1_net.set_hidden_layers(q1_hidden_layers)
+        self.q1_net_fixed.set_hidden_layers(q1_hidden_layers)
+
+        self.q2_net.set_hidden_layers(q2_hidden_layers)
+        self.q2_net_fixed.set_hidden_layers(q2_hidden_layers)
+
+    @staticmethod
+    def _onehot(category, n_categories):
+        return [1 if i == category else 0 for i in range(n_categories)]
 
 
 def _play_episode(
@@ -282,12 +273,12 @@ def _play_episode(
                 max_grad_norm=max_grad_norm
             )
 
-            if timekeeper:
-                if timekeeper.steps % net_update_freq == 0:
-                    agent.update_q1_fixed()
-
-                if timekeeper.meta_steps % net_update_freq == 0:
-                    agent.update_q2_fixed()
+            # if timekeeper:
+            #     if timekeeper.steps % net_update_freq == 0:
+            #         agent.update_q1_fixed()
+            #
+            #     if timekeeper.meta_steps % net_update_freq == 0:
+            #         agent.update_q2_fixed()
 
             if step % gather_freq == 0:
                 q1_loss_history.append(q1_loss.data.cpu().numpy())
@@ -322,10 +313,9 @@ def train_h_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
         artifacts: Dict,
-        opt1: torch.optim.Optimizer,
         q1_hidden_layers,
-        opt2: torch.optim.Optimizer,
         q2_hidden_layers,
+        learning_rate=1e-4,
         num_episodes: int = 100,
         max_timesteps=1000,
         replay_buffer_size=10**4,
@@ -354,14 +344,18 @@ def train_h_dqn_agent(
     epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
 
     # Init the network shapes.
-    agent.set_q2_layers(q2_hidden_layers)
-    agent.set_q1_layers(q1_hidden_layers)
+    agent.set_hidden_layers(q1_hidden_layers, q2_hidden_layers)
+
+    # Init optimisers.
+    opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
+    opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
 
     # Init all epsilons.
     agent.eps1 = np.ones(agent.n_goals)
     agent.eps2 = 1
 
-    epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps // agent.n_goals) for _ in range(agent.n_goals)]
+    epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps // agent.n_goals)
+                      for _ in range(agent.n_goals)]
     epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
 
     env = env_factory(0)
@@ -442,8 +436,7 @@ def hdqn_training_wrapper(
         env_factory=env_factory,
         agent=agent,
         artifacts=artifacts,
-        opt1=torch.optim.NAdam(agent.q1_params(), lr=dqn_config.getfloat("learning_rate")),
-        opt2=torch.optim.NAdam(agent.q2_params(), lr=dqn_config.getfloat("learning_rate")),
+        learning_rate=dqn_config.getfloat("learning_rate"),
         num_episodes=dqn_config.getint("num_episodes"),
         max_timesteps=dqn_config.getint("total_steps"),
         replay_buffer_size=dqn_config.getint("replay_buffer_size"),
@@ -452,8 +445,8 @@ def hdqn_training_wrapper(
         decay_end=dqn_config.getfloat("final_epsilon"),
         decay_steps=dqn_config.getfloat("decay_steps"),
         eval_freq=dqn_config.getint("eval_freq"),
-        q1_hidden_layers=[],
-        q2_hidden_layers=[]
+        q1_hidden_layers=parse_int_list(dqn_config.get("q1_hidden_layers")),
+        q2_hidden_layers=parse_int_list(dqn_config.get("q2_hidden_layers"))
     )
 
 
