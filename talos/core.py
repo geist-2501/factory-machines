@@ -20,6 +20,7 @@ def play_agent(
         wait_time: float = None
 ):
     s, _ = env.reset()
+    env.render()
     extra = None
     reward_history = []
     info_history = []
@@ -28,6 +29,9 @@ def play_agent(
         s, r, done, _, info = env.step(action)
         reward_history.append(r)
         info_history.append(info)
+
+        if env.render_mode != "human":
+            env.render()
 
         if wait_time:
             time.sleep(wait_time)

@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import List, Any, Dict
 from dataclasses import dataclass
 
 import torch
@@ -8,11 +8,9 @@ from talos.error import TalfileLoadError
 @dataclass()
 class TalFile:
     id: str
-    iters_trained: int
-    record_freq: int
-    recorded_rewards: List[float]
     agent_data: Any
 
+    training_artifacts: Dict
     used_wrappers: str = None
     env_name: str = None
 
@@ -20,10 +18,8 @@ class TalFile:
         with open(path, 'wb') as file:
             torch.save({
                 "id": self.id,
-                "iters_trained": self.iters_trained,
-                "record_freq": self.record_freq,
-                "recorded_rewards": self.recorded_rewards,
                 "agent_data": self.agent_data,
+                "training_artifacts": self.training_artifacts,
                 "used_wrappers": self.used_wrappers,
                 "env_name": self.env_name
             }, file)

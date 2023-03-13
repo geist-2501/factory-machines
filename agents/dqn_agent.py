@@ -166,6 +166,7 @@ def _play_into_buffer(
 def train_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
+        artifacts: Dict,
         opt: torch.optim.Optimizer,
         epsilon_decay: StaticLinearDecay = StaticLinearDecay(1, 0.1, 1 * 10 ** 4),
         max_steps: int = 4 * 10 ** 4,
@@ -194,6 +195,8 @@ def train_dqn_agent(
         fig, axs = plt.subplots(1, 3, figsize=(12, 6))
     else:
         fig, axs = None, None
+
+    # TODO add artifacts.
 
     mean_reward_history = []
     loss_history = []
@@ -255,11 +258,13 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
 def dqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
-        dqn_config: configparser.SectionProxy
+        dqn_config: configparser.SectionProxy,
+        artifacts: Dict,
 ):
     train_dqn_agent(
         env_factory=env_factory,
         agent=agent,
+        artifacts=artifacts,
         opt=torch.optim.NAdam(agent.parameters(), lr=dqn_config.getfloat("learning_rate")),
         epsilon_decay=StaticLinearDecay(
             start_value=dqn_config.getfloat("init_epsilon"),

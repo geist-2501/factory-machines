@@ -1,18 +1,18 @@
 from typing import Optional, List, Dict
 
-import gym
 import typer
 from rich import print
 from gym.utils.play import play as gym_play
 from gym.wrappers import RecordVideo
-from talos.registration import agent_registry, wrapper_registry
-from talos.config import app as config_app
+from talos.cli.config import app as config_app
+from talos.cli.list import app as list_app
 from talos.error import *
 from talos.core import play_agent, evaluate_agents, load_config, create_env_factory, get_device, create_agent
 from talos.file import TalFile, read_talfile
 
 app = typer.Typer()
 app.add_typer(config_app, name="config")
+app.add_typer(list_app, name="list")
 
 __app_name__ = "talos"
 __version__ = "0.1.0"
@@ -59,20 +59,6 @@ def main(
     )
 ) -> None:
     return
-
-
-@app.command("list")
-def list_all():
-    """List all registered agents and wrappers."""
-    print("[bold]Currently registered agents[/]:")
-    for agent in agent_registry.keys():
-        print(" " + agent)
-    print("\n[bold]Currently registered wrappers[/]:")
-    for wrapper in wrapper_registry.keys():
-        print(" " + wrapper)
-    print("\n[bold]Currently registered environments[/]:")
-    for env in gym.envs.registry.keys():
-        print(" " + env)
 
 
 @app.command()
@@ -134,8 +120,9 @@ def train(
     if typer.confirm("Ready to proceed?", default=True) is False:
         return
 
+    training_artifacts = {}
     try:
-        training_wrapper(env_factory, agent, agent_config)
+        training_wrapper(env_factory, agent, agent_config, training_artifacts)
     except KeyboardInterrupt:
         print("[bold red]Training interrupted[/bold red].")
 
@@ -147,7 +134,13 @@ def train(
                 path = typer.prompt("Enter a path to save to")
             print(f"Saving agent to disk ([italic]{path}[/]) ...")
             data = agent.save()
-            talfile = TalFile(opt_agent, 0, 0, [], data, opt_wrapper, opt_env)
+            talfile = TalFile(
+                id=opt_agent,
+                env_name=opt_env,
+                agent_data=data,
+                training_artifacts=training_artifacts,
+                used_wrappers=opt_wrapper
+            )
             talfile.write(path)
         except OSError as ex:
             print("[bold red]Saving failed![/] " + ex.strerror)

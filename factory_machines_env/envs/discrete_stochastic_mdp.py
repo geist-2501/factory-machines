@@ -15,13 +15,15 @@ class DiscreteStochasticMDP(gym.Env):
     _left = 0
     _right = 1
 
-    def __init__(self, render_mode: Optional[str] = None,):
+    def __init__(self, render_mode: Optional[str] = None, is_deterministic: str = "False"):
+        self._is_deterministic = is_deterministic == "True"  # lol.
         self._num_states = 6
         self.observation_space = spaces.Box(0, 1, shape=(self._num_states,), dtype=int)
         self.action_space = spaces.Discrete(2)  # Left, right.
 
         self._current_state = 1
         self._reward = 0.01
+        self._last_action = None
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -39,15 +41,16 @@ class DiscreteStochasticMDP(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
+        self._last_action = action
         if action == self._left:
             # On left, move left.
             self._move_left()
         elif action == self._right:
             # On right, roll dice and move right on result > 0.5, left otherwise.
-            if self.np_random.random() > 0.5:
-                self._move_left()
-            else:
+            if self._is_deterministic or self.np_random.random() > 0.5:
                 self._move_right()
+            else:
+                self._move_left()
 
         # If agent goes into the last state, give a bigger reward on completion.
         if self._current_state == (self._num_states - 1):
@@ -74,6 +77,9 @@ class DiscreteStochasticMDP(gym.Env):
     def _render_ansi(self):
         pointer, states = self._get_lines()
         lines = f"{states}\n{pointer}"
+        print(lines)
+        if self._last_action is not None:
+            print(f"Last action: {self._last_action} - current reward {self._reward}\n")
         return lines
 
     def _get_lines(self):
@@ -91,7 +97,7 @@ class DiscreteStochasticMDP(gym.Env):
 
         font_width, font_height = font.size(" " + "SS " * self._num_states)
         screen_width = font_width + padding * 2
-        screen_height = (font_height + padding) * 2  # Yes I meant that, there's two lines.
+        screen_height = font_height * 3 + padding * 2
 
         if self.screen is None:
             pygame.init()
@@ -99,7 +105,7 @@ class DiscreteStochasticMDP(gym.Env):
 
         self.screen.fill((255, 255, 255))
         pointer, states = self._get_lines()
-        draw_lines([states, pointer], self.screen, (padding, padding), font, color=0)
+        draw_lines([states, pointer, f"R: {self._reward}"], self.screen, (padding, padding), font, color=0)
 
         return np.transpose(
             np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
