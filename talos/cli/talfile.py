@@ -69,6 +69,10 @@ def replay(
         opt_render: str = typer.Option(
             "human",
             "--render-as"
+        ),
+        opt_target_fps: int = typer.Option(
+            30,
+            "--fps"
         )
 ):
     """Play the agent in the environment it was trained in."""
@@ -108,7 +112,7 @@ def replay(
 
     try:
         for _ in range(opt_num_eps):
-            play_agent(agent, env, wait_time=0.5)
+            play_agent(agent, env, wait_time=1/opt_target_fps)
     except KeyboardInterrupt:
         env.close()
         raise typer.Abort()

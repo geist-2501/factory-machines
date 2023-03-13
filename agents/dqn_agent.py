@@ -85,6 +85,7 @@ class DQNAgent(Agent):
     def load(self, agent_data: Dict):
         data, layers = itemgetter("data", "layers")(agent_data)
         self.net.set_hidden_layers(layers)
+        self.target_net.set_hidden_layers(layers)
         self.net.load_state_dict(data)
         self.target_net.load_state_dict(data)
 

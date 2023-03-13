@@ -239,7 +239,7 @@ def _play_episode(
             meta_r = 0
             meta_t = 0
 
-        # get action from controller.
+        # Get action from controller.
         a = agent.get_epsilon_action(s, g)
 
         # Step the env and get extrinsic reward for the meta-controller.
@@ -273,12 +273,12 @@ def _play_episode(
                 max_grad_norm=max_grad_norm
             )
 
-            # if timekeeper:
-            #     if timekeeper.steps % net_update_freq == 0:
-            #         agent.update_q1_fixed()
-            #
-            #     if timekeeper.meta_steps % net_update_freq == 0:
-            #         agent.update_q2_fixed()
+            if timekeeper:
+                if timekeeper.steps % net_update_freq == 0:
+                    agent.update_q1_fixed()
+
+                if timekeeper.meta_steps % net_update_freq == 0:
+                    agent.update_q2_fixed()
 
             if step % gather_freq == 0:
                 q1_loss_history.append(q1_loss.data.cpu().numpy())
@@ -326,7 +326,7 @@ def train_h_dqn_agent(
         decay_end=0.1,
         decay_steps=10**4
 ):
-    """Train the hDQN agent following the algorithm outlined by Kulkarni et al. 2016."""
+    """Train the h-DQN agent following the algorithm outlined by Kulkarni et al. 2016."""
     # Init graphing.
     if can_graph():
         fig, axs = plt.subplots(2, 2, figsize=(12, 12))
@@ -411,7 +411,7 @@ def train_h_dqn_agent(
         grad_norm_history = np.append(grad_norm_history, ep_grad_norm_history, axis=1)
 
         if ep % eval_freq == 0:
-            score = evaluate(env_factory(ep), agent, n_episodes=10, max_episode_steps=500)
+            score = evaluate(env_factory(ep), agent, n_episodes=3, max_episode_steps=500)
             mean_reward_history.append(
                 score
             )
