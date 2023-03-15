@@ -49,7 +49,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             '.d...d.',
             '.......',
         ],
-        "4": [
+        "3": [
             '....o....',
             '.........',
             '.dwd.dwd.',
@@ -71,7 +71,17 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         'agent': (43, 79, 255)
     }
 
-    def __init__(self, render_mode: Optional[str] = None, map_id="0") -> None:
+    _item_pickup_reward = 1
+    _item_pickup_punishment = -1
+    _item_dropoff_reward = 1
+
+    def __init__(self, render_mode: Optional[str] = None, map_id="0", agent_capacity=10, verbose=False) -> None:
+        agent_capacity = int(agent_capacity)
+        if type(verbose) is str:
+            self._verbose = verbose == "True"
+        else:
+            self._verbose = verbose
+
         self._map = self.maps[map_id]
 
         output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
@@ -83,6 +93,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         self._len_x = len_x
         self._len_y = len_y
 
+        self._agent_cap = agent_capacity
         self._agent_loc = np.array(output_loc, dtype=int)
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
 
@@ -181,6 +192,9 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
         if self.render_mode == "human":
             self.render()
+
+        if self._verbose:
+            print(f"Reward: {reward}")
 
         return obs, reward, False, False, info
 
@@ -293,7 +307,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             pygame.display.quit()
             pygame.quit()
 
-    def get_keys_to_action(self):
+    @staticmethod
+    def get_keys_to_action():
         return {
             'w': 0,
             'a': 1,
@@ -303,8 +318,10 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         }
 
     def _try_grab(self) -> int:
-        """Try and add the current depot resource to the agent inventory.
-        Returns reward if agent needed the resource, punishment if not."""
+        """
+        Try and add the current depot resource to the agent inventory.
+        Returns reward if agent needed the resource, punishment if not.
+        """
         depot_queues = self._get_depot_queues()
 
         for depot_num, depot_loc in enumerate(self._depot_locs):
@@ -312,15 +329,27 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
                 continue
 
             # Agent is on a depot.
-            if self._agent_inv[depot_num] != 0:
-                # Agent is already holding material, administer punishment.
-                self._history.log(f"Tried to pick up already held resource D{depot_num}.")
-                return -1
-            elif depot_queues[depot_num]:
+            if self._agent_inv[depot_num] == self._agent_cap:
+                # Agent at max capacity for item, administer punishment.
+                self._history.log(f"Inv full for D{depot_num}.")
+
+                return self._item_pickup_punishment
+
+            elif self._agent_inv[depot_num] < depot_queues[depot_num]:
                 # Agent picks up a needed resource.
-                self._history.log(f"Agent picked up required resource D{depot_num}.")
-                self._agent_inv[depot_num] = 1
-                return 5
+                self._history.log(f"Picked up required item D{depot_num}.")
+                self._agent_inv[depot_num] += 1
+
+                return self._item_pickup_reward
+
+            elif self._agent_inv[depot_num] >= depot_queues[depot_num]:
+                # Agent picks up an unneeded resource.
+                self._history.log(f"Picked up unnecessary item D{depot_num}.")
+                self._agent_inv[depot_num] += 1
+
+                # Punishing this behaviour is a matter of debate.
+                # It may lock out interesting behaviours like stockpiling popular items.
+                return 0
 
         self._history.log("Agent tried to grab a blank tile.")
         return 0

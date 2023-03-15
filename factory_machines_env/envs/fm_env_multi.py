@@ -9,26 +9,37 @@ from factory_machines_env.envs.pygame_utils import draw_lines
 
 class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
+    _age_reward_decay = 40  # How much of the extra reward is given for late order fulfilment.
+    _age_reward_max = 5  # The maximum bonus given for a quickly completed order.
+    _reward_per_order = 10  # The amount of reward for a fulfilled order.
+    _item_pickup_reward = 1  # The amount of reward for picking up a needed item.
+    _item_pickup_punishment = -1  # The amount of reward for picking up an item it shouldn't.
+    _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
+
     def __init__(
             self,
             render_mode: Optional[str] = None,
             map_id="0",
             num_orders=10,
-            order_override: Dict = None,
-            timestep_override: int = None
+            agent_capacity=10,
+            order_override: List = None,
+            timestep_override: int = None,
+            verbose=False,
     ) -> None:
-        super().__init__(render_mode, map_id)
+        super().__init__(render_mode, map_id, agent_capacity, verbose)
+
+        num_orders = int(num_orders)
 
         self._total_num_orders = num_orders
         self._num_orders_pending = num_orders
-        self._open_orders: Dict[int, Tuple[int, np.ndarray]] = {} if order_override is None else order_override
+        self._open_orders: List[Tuple[int, np.ndarray]] = [] if order_override is None else order_override
         self._timestep = 0 if timestep_override is None else timestep_override
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
         obs, _ = super().reset(seed=seed, options=options)
 
         self._num_orders_pending = self._total_num_orders
-        self._open_orders = {}
+        self._open_orders = []
         self._timestep = 0
 
         return obs, {}
@@ -38,13 +49,10 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
         # Process orders.
         should_create_order = bool(np.random.binomial(1, 0.1))
-        if should_create_order:
+        if should_create_order and self._num_orders_pending > 0:
             self._num_orders_pending -= 1
-            order_id = self._total_num_orders - self._num_orders_pending + 1
-            order = np.zeros(self._num_depots, dtype=int)
-            while sum(order) == 0:
-                order = (np.random.normal(size=self._num_depots) > 0.5).astype(int)
-            self._open_orders[order_id] = (self._timestep, order)
+            order = self._generate_order()
+            self._open_orders.append((self._timestep, order))
 
         terminated = self._num_orders_pending == 0 and len(self._open_orders) == 0
         reward += 100 if terminated else 0
@@ -53,43 +61,56 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
         return obs, reward, terminated, False, info
 
+    def _generate_order(self) -> np.ndarray:
+        """Generate an order."""
+        order = np.zeros(self._num_depots, dtype=int)
+        while sum(order) == 0:
+            order = (np.random.normal(size=self._num_depots) > 0.5).astype(int)
+
+        return order
+
     def _render_info(self, font, header_origin, screen_width, spacing):
 
         # Draw table header.
         table_rows = [
-            "   | T  " + ' '.join(["D" + str(x+1) for x in range(self._num_depots)]),
-            "INV|    " + self._add_table_padding(self._agent_inv),
-            "DEP|    " + self._add_table_padding(self._get_depot_queues()),
-            "AGE|    " + self._add_table_padding(self._get_depot_ages()),
+            "   | " + ' '.join([f"{f'D{x}':>3}" for x in range(self._num_depots)]),
+            "INV| " + self._add_table_padding(self._agent_inv),
+            "DEP| " + self._add_table_padding(self._get_depot_queues()),
+            "AGE| " + self._add_table_padding(self._get_depot_ages()),
+            "   |",
         ]
 
-        for order_id, order in self._open_orders.items():
+        for order in self._open_orders:
             order_t, order_items = order
-            table_rows.append(f"O{order_id:02}| {order_t:>2} " + self._add_table_padding(order_items))
+            table_rows.append(f"{order_t:>3}| " + self._add_table_padding(order_items))
 
         draw_lines(table_rows, self.screen, header_origin, font, self.colors["text"])
 
     @staticmethod
     def _add_table_padding(arr):
-        return ' '.join(map(lambda i: f"{i:2}", arr))
+        return ' '.join(map(lambda i: f"{i:3}", arr))
 
     def _depot_drop_off(self) -> int:
         # Go through each open order and strike off items the agent holds.
         # Then, if an order has been completed, move it to the completed pile.
         reward = 0
-        for order_id, order in self._open_orders.copy().items():
+        for i, order in enumerate(self._open_orders.copy()):
             order_t, order_items = order
-            reward += sum(order_items * self._agent_inv)
-            agent_inv_inverse = 1 - self._agent_inv
-            new_order = order_items * agent_inv_inverse  # Clears pending items in an order.
+            items_fulfilled = np.minimum(self._agent_inv, order_items)
+            reward += sum(items_fulfilled) * self._item_dropoff_reward
+
+            new_order = order_items - items_fulfilled
+            self._open_orders[i] = (order_t, new_order)
+
+            self._agent_inv -= items_fulfilled
+
             if sum(new_order) == 0:
                 # Order is complete!
-                reward += 10
-                del self._open_orders[order_id]
-            else:
-                self._open_orders[order_id] = (order_t, new_order)
+                order_age = self._timestep - order_t
+                reward += self._reward_per_order + self._sample_age_reward(order_age)
 
-        self._agent_inv = np.zeros(self._num_depots, dtype=int)
+        # Remove complete orders.
+        self._open_orders[:] = [order for order in self._open_orders if sum(order[1]) != 0]
 
         return reward
 
@@ -101,7 +122,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
     def _get_depot_queues(self):
         depot_queues = np.zeros(self._num_depots, dtype=int)
-        for _, order in self._open_orders.items():
+        for order in self._open_orders:
             _, order_items = order
             depot_queues += order_items
 
@@ -110,10 +131,13 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     def _get_depot_ages(self):
         """Get the age of the oldest open order on the depots."""
         depot_ages = np.zeros(self._num_depots, dtype=int)
-        for _, order in self._open_orders.items():
+        for order in self._open_orders:
             order_t, order_items = order
             order_age = self._timestep - order_t
             mask = order_items * order_age
             depot_ages = np.maximum(depot_ages, mask)
 
         return depot_ages
+
+    def _sample_age_reward(self, age: int) -> float:
+        return np.exp(-age / self._age_reward_decay) * self._age_reward_max

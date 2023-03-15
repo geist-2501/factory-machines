@@ -157,6 +157,10 @@ def play(
         opt_env_args: List[str] = typer.Option(
             [],
             "--env-arg",
+        ),
+        opt_fps: int = typer.Option(
+            None,
+            "--fps"
         )
 ):
     """Play the environment as a human. (Not for procrastination!)"""
@@ -164,4 +168,4 @@ def play(
 
     env_factory = create_env_factory(arg_env, opt_wrapper, render_mode='rgb_array', env_args=opt_env_args)
     env = env_factory(opt_seed)
-    gym_play(env)
+    gym_play(env, fps=opt_fps)
