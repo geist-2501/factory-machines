@@ -74,6 +74,10 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
         return obs, reward, terminated, False, info
 
+    def get_info(self):
+        # TODO
+        pass
+
     def _generate_order(self) -> np.ndarray:
         """Generate an order."""
         order = np.zeros(self._num_depots, dtype=int)
