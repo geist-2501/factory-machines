@@ -171,7 +171,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             direction = self._action_to_direction[action]
             new_pos = self._agent_loc + direction
             # new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
-            if self._is_oob(new_pos[1], new_pos[0]) or self._map[new_pos[1]][new_pos[0]] == 'w':
+            if self._is_oob(new_pos[0], new_pos[1]) or self._map[new_pos[1]][new_pos[0]] == 'w':
                 action_reward += -1
                 self._history.log("Agent bumped into a wall.")
             else:

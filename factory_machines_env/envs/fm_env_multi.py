@@ -1,6 +1,7 @@
 from typing import Optional, Tuple, List, Dict
 
 import numpy as np
+from gym import spaces
 from gym.core import ActType, ObsType
 from numpy.random import default_rng
 from factory_machines_env.envs.fm_env_base import FactoryMachinesEnvBase
@@ -12,7 +13,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     _age_reward_decay = 40  # How much of the extra reward is given for late order fulfilment.
     _age_reward_max = 5  # The maximum bonus given for a quickly completed order.
     _reward_per_order = 10  # The amount of reward for a fulfilled order.
-    _item_pickup_reward = 1  # The amount of reward for picking up a needed item.
+    _item_pickup_reward = 0.5  # The amount of reward for picking up a needed item.
     _item_pickup_punishment = -1  # The amount of reward for picking up an item it shouldn't.
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
 
@@ -27,6 +28,18 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             verbose=False,
     ) -> None:
         super().__init__(render_mode, map_id, agent_capacity, verbose)
+
+        self.observation_space = spaces.Dict(
+            {
+                "agent_loc": spaces.Box(0, np.array([self._len_x, self._len_y]) - 1, shape=(2,), dtype=int),
+                "agent_obs": spaces.Box(0, 1, shape=(9,), dtype=int),
+                "agent_inv": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
+                "depot_locs": spaces.Box(0, max(self._len_x, self._len_y), shape=(len(self._depot_locs) * 2,), dtype=int),
+                "depot_queues": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
+                "output_loc": spaces.Box(0, max(self._len_x, self._len_y), shape=(2,), dtype=int),
+                "depot_ages": spaces.Box(0, 1000, shape=(len(self._depot_locs),), dtype=int),
+            }
+        )
 
         num_orders = int(num_orders)
 
