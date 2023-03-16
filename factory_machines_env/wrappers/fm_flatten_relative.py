@@ -15,4 +15,5 @@ class FactoryMachinesFlattenRelativeWrapper(gym.ObservationWrapper):
             *make_relative(obs["agent_loc"], obs["depot_locs"]),
             *obs["depot_queues"],
             *make_relative(obs["agent_loc"], obs["output_loc"]),
+            *obs["depot_ages"]
         ]
