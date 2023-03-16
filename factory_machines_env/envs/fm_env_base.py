@@ -349,7 +349,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
                 # Punishing this behaviour is a matter of debate.
                 # It may lock out interesting behaviours like stockpiling popular items.
-                return 0
+                return self._item_pickup_punishment
 
         self._history.log("Agent tried to grab a blank tile.")
         return 0
