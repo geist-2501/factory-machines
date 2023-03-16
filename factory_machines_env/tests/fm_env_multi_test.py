@@ -74,14 +74,11 @@ class FMEnvMultiTest(unittest.TestCase):
 
         pass
 
-    def should_clear_agent_inventory_correctly(self):
-        # TODO
-        pass
-
     @staticmethod
     def _go(env: gym.Env, direction: int, steps: int):
         for _ in range(steps):
             env.step(direction)
+
 
 if __name__ == '__main__':
     unittest.main()
