@@ -1,10 +1,11 @@
-from typing import Optional, Tuple, List, Dict
+import math
+from typing import Optional, Tuple, List, Dict, Union
 
 import numpy as np
 from gym import spaces
 from gym.core import ActType, ObsType
-from numpy.random import default_rng
 from factory_machines_env.envs.fm_env_base import FactoryMachinesEnvBase
+from factory_machines_env.envs.order_generators import OrderGenerator, BinomialOrderGenerator
 from factory_machines_env.envs.pygame_utils import draw_lines
 
 
@@ -17,17 +18,22 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     _item_pickup_punishment = -1  # The amount of reward for picking up an item it shouldn't.
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
 
+    _age_bands = 3  # The number of stages of 'oldness'.
+    _age_max_timesteps = 100  # The amount of timesteps that can elapse before an order is considered old.
+
     def __init__(
             self,
             render_mode: Optional[str] = None,
             map_id="0",
             num_orders=10,
             agent_capacity=10,
-            order_override: List = None,
             timestep_override: int = None,
+            order_generator: OrderGenerator = BinomialOrderGenerator(),
             verbose=False,
     ) -> None:
         super().__init__(render_mode, map_id, agent_capacity, verbose)
+
+        self._order_generator = order_generator
 
         self.observation_space = spaces.Dict(
             {
@@ -45,7 +51,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
         self._total_num_orders = num_orders
         self._num_orders_pending = num_orders
-        self._open_orders: List[Tuple[int, np.ndarray]] = [] if order_override is None else order_override
+        self._open_orders: List[Tuple[int, np.ndarray]] = []
         self._timestep = 0 if timestep_override is None else timestep_override
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
@@ -61,10 +67,10 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
         obs, reward, terminated, _, info = super().step(action)
 
         # Process orders.
-        should_create_order = bool(np.random.binomial(1, 0.1))
+        should_create_order = self._order_generator.should_make_order(len(self._open_orders))
         if should_create_order and self._num_orders_pending > 0:
             self._num_orders_pending -= 1
-            order = self._generate_order()
+            order = self._order_generator.make_order(self._num_depots)
             self._open_orders.append((self._timestep, order))
 
         terminated = self._num_orders_pending == 0 and len(self._open_orders) == 0
@@ -75,16 +81,10 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
         return obs, reward, terminated, False, info
 
     def get_info(self):
-        # TODO
-        pass
-
-    def _generate_order(self) -> np.ndarray:
-        """Generate an order."""
-        order = np.zeros(self._num_depots, dtype=int)
-        while sum(order) == 0:
-            order = (np.random.normal(size=self._num_depots) > 0.5).astype(int)
-
-        return order
+        ages = self._get_depot_ages()
+        orders = self._open_orders
+        queues = self._get_depot_queues()
+        return ages, orders, queues
 
     def _render_info(self, font, header_origin, screen_width, spacing):
 
@@ -154,7 +154,26 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             mask = order_items * order_age
             depot_ages = np.maximum(depot_ages, mask)
 
+        # Cutoff.
+        depot_ages = self._get_age(depot_ages)
+
         return depot_ages
 
+    def _get_age(self, order_t: Union[int, np.ndarray]) -> Union[int, np.ndarray]:
+        compression_factor = self._age_max_timesteps / self._age_bands
+
+        # Cutoff.
+        order_t = np.minimum(order_t, self._age_max_timesteps)
+
+        # Compress.
+        if type(order_t) is np.int32:
+            return math.floor(order_t / compression_factor)
+        elif type(order_t) is np.ndarray:
+            return np.floor(order_t / compression_factor).astype(int)
+
+        raise RuntimeError("Times are neither int nor ndarray.")
+
     def _sample_age_reward(self, age: int) -> float:
-        return np.exp(-age / self._age_reward_decay) * self._age_reward_max
+        compressed_age = self._get_age(age)
+        reward = self._age_bands - compressed_age
+        return reward
