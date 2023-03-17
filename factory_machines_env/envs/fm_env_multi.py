@@ -165,13 +165,12 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     def _get_age(self, order_t: Union[int, np.ndarray]) -> Union[int, np.ndarray]:
         compression_factor = self._age_max_timesteps / self._age_bands
 
-        # Cutoff.
-        order_t = np.minimum(order_t, self._age_max_timesteps)
-
-        # Compress.
-        if type(order_t) is np.int32:
+        if type(order_t) is int:
+            # Cutoff.
+            order_t = np.minimum(order_t, self._age_max_timesteps).item()
             return math.floor(order_t / compression_factor)
         elif type(order_t) is np.ndarray:
+            order_t = np.minimum(order_t, self._age_max_timesteps)
             return np.floor(order_t / compression_factor).astype(int)
 
         raise RuntimeError("Times are neither int nor ndarray.")
