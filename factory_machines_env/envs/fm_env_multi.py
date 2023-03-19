@@ -5,7 +5,7 @@ import numpy as np
 from gym import spaces
 from gym.core import ActType, ObsType
 from factory_machines_env.envs.fm_env_base import FactoryMachinesEnvBase
-from factory_machines_env.envs.order_generators import OrderGenerator, BinomialOrderGenerator
+from factory_machines_env.envs.order_generators import OrderGenerator, BinomialOrderGenerator, GaussianOrderGenerator
 from factory_machines_env.envs.pygame_utils import draw_lines
 
 
@@ -15,7 +15,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     _age_reward_max = 5  # The maximum bonus given for a quickly completed order.
     _reward_per_order = 10  # The amount of reward for a fulfilled order.
     _item_pickup_reward = 0.5  # The amount of reward for picking up a needed item.
-    _item_pickup_punishment = -1  # The amount of reward for picking up an item it shouldn't.
+    _item_pickup_punishment = -0.5  # The amount of reward for picking up an item it shouldn't.
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
 
     _age_bands = 3  # The number of stages of 'oldness'.
@@ -28,12 +28,15 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             num_orders=10,
             agent_capacity=10,
             timestep_override: int = None,
-            order_generator: OrderGenerator = BinomialOrderGenerator(),
+            order_generator: OrderGenerator = None,
             verbose=False,
     ) -> None:
         super().__init__(render_mode, map_id, agent_capacity, verbose)
 
-        self._order_generator = order_generator
+        if order_generator is None:
+            self._order_generator = GaussianOrderGenerator(self._map.p, self._map.max_order_size)
+        else:
+            self._order_generator = order_generator
 
         self.observation_space = spaces.Dict(
             {
@@ -162,13 +165,12 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     def _get_age(self, order_t: Union[int, np.ndarray]) -> Union[int, np.ndarray]:
         compression_factor = self._age_max_timesteps / self._age_bands
 
-        # Cutoff.
-        order_t = np.minimum(order_t, self._age_max_timesteps)
-
-        # Compress.
-        if type(order_t) is np.int32:
+        if type(order_t) is int:
+            # Cutoff.
+            order_t = np.minimum(order_t, self._age_max_timesteps).item()
             return math.floor(order_t / compression_factor)
         elif type(order_t) is np.ndarray:
+            order_t = np.minimum(order_t, self._age_max_timesteps)
             return np.floor(order_t / compression_factor).astype(int)
 
         raise RuntimeError("Times are neither int nor ndarray.")

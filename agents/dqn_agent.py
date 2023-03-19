@@ -152,6 +152,7 @@ def train_dqn_agent(
     agent.set_hidden_layers(hidden_layers)
 
     opt = torch.optim.NAdam(agent.parameters(), lr=learning_rate)
+    lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, max_steps)
 
     # Create buffer and fill it with experiences.
     buffer = ReplayBuffer(replay_buffer_size)
@@ -189,6 +190,7 @@ def train_dqn_agent(
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
         opt.step()
+        lr_sched.step()
         opt.zero_grad()
 
         if step % update_target_net_freq == 0:

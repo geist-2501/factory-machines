@@ -1,4 +1,4 @@
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Dict
 from abc import ABC, abstractmethod
 
 import gym
@@ -8,48 +8,40 @@ from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
 
 from factory_machines_env.envs.pygame_utils import History
-
-
-def _get_map_info(m: List[str]) -> Tuple[np.ndarray, np.ndarray, int, int]:
-    output_loc = None
-    depot_locs = []
-    len_y = len(m)
-    len_x = len(m[0])
-    for y in range(len_y):
-        for x in range(len_x):
-            cell = m[y][x]
-            if cell == 'o':
-                # Get output loc.
-                output_loc = np.array([x, y], dtype=int)
-            elif cell == 'd':
-                # Get depot locs.
-                depot_locs.append(np.array([x, y], dtype=int))
-
-    return output_loc, np.array(depot_locs), len_x, len_y
+from factory_machines_env.envs.warehouse import Map
 
 
 class FactoryMachinesEnvBase(gym.Env, ABC):
     metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 4}
-    maps = {
-        "0": [
+    maps: Dict[str, Map] = {
+        "0": Map([
             'o.d',
             '...',
             'd.d',
         ],
-        "1": [
+            [0.1, 0.2, 0.6],
+            3
+        ),
+        "1": Map([
             'o.w.d',
             '..w..',
             '.....',
             'd...d',
         ],
-        "2": [
+            [1, 1, 1],
+            3
+        ),
+        "2": Map([
             '...o...',
             '.d...d.',
             '.d.w.d.',
             '.d...d.',
             '.......',
         ],
-        "3": [
+            [0.2, 0.1, 0.5, 0.3, 0.2, 0.3],
+            4
+        ),
+        "3": Map([
             '....o....',
             '.........',
             '.dwd.dwd.',
@@ -60,7 +52,9 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             '.........',
             '.........',
         ],
-
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            5
+        ),
     }
 
     colors = {
@@ -72,8 +66,9 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     }
 
     _item_pickup_reward = 1
-    _item_pickup_punishment = -1
+    _item_pickup_punishment = -0.5
     _item_dropoff_reward = 1
+    _collision_punishment = -0.1
 
     def __init__(self, render_mode: Optional[str] = None, map_id="0", agent_capacity=10, verbose=False) -> None:
         agent_capacity = int(agent_capacity)
@@ -84,29 +79,27 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
         self._map = self.maps[map_id]
 
-        output_loc, depot_locs, len_x, len_y = _get_map_info(self._map)
+        self._output_loc = self._map.output_loc
+        self._depot_locs = self._map.depot_locs
+        self._num_depots = len(self._depot_locs)
 
-        self._output_loc = output_loc
-        self._depot_locs = depot_locs
-        self._num_depots = len(depot_locs)
-
-        self._len_x = len_x
-        self._len_y = len_y
+        self._len_x = self._map.len_x
+        self._len_y = self._map.len_y
 
         self._agent_cap = agent_capacity
-        self._agent_loc = np.array(output_loc, dtype=int)
+        self._agent_loc = np.array(self._output_loc, dtype=int)
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
 
         self._history = History(size=8)
 
         self.observation_space = spaces.Dict(
             {
-                "agent_loc": spaces.Box(0, np.array([len_x, len_y]) - 1, shape=(2,), dtype=int),
+                "agent_loc": spaces.Box(0, np.array([self._len_x, self._len_y]) - 1, shape=(2,), dtype=int),
                 "agent_obs": spaces.Box(0, 1, shape=(9,), dtype=int),
                 "agent_inv": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
-                "depot_locs": spaces.Box(0, max(len_x, len_y), shape=(len(self._depot_locs) * 2,), dtype=int),
+                "depot_locs": spaces.Box(0, max(self._len_x, self._len_y), shape=(len(self._depot_locs) * 2,), dtype=int),
                 "depot_queues": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
-                "output_loc": spaces.Box(0, max(len_x, len_y), shape=(2,), dtype=int),
+                "output_loc": spaces.Box(0, max(self._len_x, self._len_y), shape=(2,), dtype=int),
             }
         )
 
@@ -171,8 +164,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             direction = self._action_to_direction[action]
             new_pos = self._agent_loc + direction
             # new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
-            if self._is_oob(new_pos[0], new_pos[1]) or self._map[new_pos[1]][new_pos[0]] == 'w':
-                action_reward += -1
+            if self._is_oob(new_pos[0], new_pos[1]) or self._map.layout[new_pos[1]][new_pos[0]] == 'w':
+                action_reward += self._collision_punishment
                 self._history.log("Agent bumped into a wall.")
             else:
                 self._agent_loc = new_pos
@@ -259,7 +252,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         # Draw walls.
         for x in range(self._len_x):
             for y in range(self._len_y):
-                if self._map[y][x] == 'w':
+                if self._map.layout[y][x] == 'w':
                     pygame.draw.rect(
                         self.screen,
                         self.colors["foreground"],
@@ -317,7 +310,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             'g': 4,
         }
 
-    def _try_grab(self) -> int:
+    def _try_grab(self) -> float:
         """
         Try and add the current depot resource to the agent inventory.
         Returns reward if agent needed the resource, punishment if not.
@@ -349,10 +342,10 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
                 # Punishing this behaviour is a matter of debate.
                 # It may lock out interesting behaviours like stockpiling popular items.
-                return 0
+                return self._item_pickup_punishment
 
         self._history.log("Agent tried to grab a blank tile.")
-        return 0
+        return self._item_pickup_punishment
 
     def _is_oob(self, x: int, y: int):
         return x < 0 or x >= self._len_x or y < 0 or y >= self._len_y

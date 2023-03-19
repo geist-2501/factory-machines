@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TypeVar, List
 
 import numpy as np
+from scipy.stats import norm
 
 OrderType = TypeVar("OrderType")
 
@@ -33,14 +34,23 @@ class BinomialOrderGenerator(OrderGenerator):
         return order
 
 
-class TriangularOrderGenerator(OrderGenerator):
+class GaussianOrderGenerator(OrderGenerator):
+
+    def __init__(self, p: List[float], max_order_size: int) -> None:
+        super().__init__()
+        p = np.array(p)
+        self._p = p / p.sum()
+        self._max = max_order_size
+
     def should_make_order(self, num_current_orders: int) -> bool:
-        # TODO
-        return super().should_make_order(num_current_orders)
+        return bool(np.random.binomial(1, 0.1)) or num_current_orders == 0
 
     def make_order(self, size) -> OrderType:
-        # TODO
-        return super().make_order(size)
+        order = np.zeros(size, dtype=int)
+        num_items = np.floor(np.random.triangular(1, self._max / 2, self._max)).astype(int)
+        items = np.random.choice(size, size=num_items, p=self._p, replace=False)
+        order[items] = 1
+        return order
 
 
 class MockOrderGenerator(OrderGenerator):
