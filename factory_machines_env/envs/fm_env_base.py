@@ -78,7 +78,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         'foreground': (50, 50, 50),
         'gridlines': (214, 214, 214),
         'text': (10, 10, 10),
-        'agent': (43, 79, 255)
+        'agent': (43, 79, 255),
+        'agent-light': (7, 35, 176),
     }
 
     _item_pickup_reward = 1
@@ -111,6 +112,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         self._agent_cap = agent_capacity
         self._agent_loc = np.array(self._output_loc, dtype=int)
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
+
+        self._last_action = 0
 
         self._history = History(size=8)
 
@@ -159,7 +162,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
                     offset_x = self._agent_loc[0] + x
                     offset_y = self._agent_loc[1] + y
                     if self._is_oob(offset_x, offset_y):
-                        local_obs[y, x] = 1
+                        local_obs[x, y] = 1
 
         return {
             "agent_loc": self._agent_loc,
@@ -187,6 +190,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         return obs, {}
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
+
+        self._last_action = action
 
         # Process actions.
         action_reward = 0
@@ -276,8 +281,10 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         # Draw depots
         output_text = font.render("O", True, self.colors["text"])
         self.screen.blit(output_text, self._output_loc * cell_size)
+        depot_queues = self._get_depot_queues()
         for depot_num, depot_loc in enumerate(self._depot_locs):
-            depot_text = font.render("D" + str(depot_num), True, self.colors["text"])
+            item_diff = depot_queues[depot_num] - self._agent_inv[depot_num]
+            depot_text = font.render(f"D{depot_num} - {item_diff}", True, self.colors["text"])
             self.screen.blit(depot_text, depot_loc * cell_size)
 
         # Draw walls.
@@ -296,7 +303,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         # Draw agent.
         pygame.draw.circle(
             self.screen,
-            self.colors["agent"],
+            self.colors["agent"] if self._last_action != 4 else self.colors["agent-light"],
             (self._agent_loc + 0.5) * cell_size,
             cell_size / 3,
         )
