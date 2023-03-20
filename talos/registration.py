@@ -12,6 +12,7 @@ class AgentSpec:
     """A specification for creating agents with Talos."""
     id: str
     training_wrapper: Callable
+    graphing_wrapper: Callable[[Dict], None]
     agent_factory: Callable[[int, int], Agent]
 
 
@@ -27,48 +28,77 @@ agent_registry: Dict[str, AgentSpec] = {}
 wrapper_registry: Dict[str, WrapperSpec] = {}
 
 
+def _dummy_training_wrapper(
+        env_factory,
+        agent,
+        agent_config,
+        training_artifacts
+):
+    print("Dummy training wrapper in use - no training will be done.")
+    pass
+
+
+def _dummy_graphing_wrapper(
+        artifacts
+):
+    print("Dummy graphing wrapper in use - no graphs produced.")
+    pass
+
+
 def register_agent(
-        id: str,
-        training_wrapper: Callable,
+        agent_id: str,
         agent_factory: Callable[[], Agent],
+        training_wrapper: Callable = _dummy_training_wrapper,
+        graphing_wrapper: Callable[[Dict], None] = _dummy_graphing_wrapper,
 ):
     """Register an agent with Talos."""
     global agent_registry
 
     agent_spec = AgentSpec(
-        id=id,
+        id=agent_id,
         training_wrapper=training_wrapper,
+        graphing_wrapper=graphing_wrapper,
         agent_factory=agent_factory
     )
 
-    agent_registry[id] = agent_spec
+    agent_registry[agent_id] = agent_spec
 
 
-def get_agent(
-        id: str
-) -> Tuple[Callable, Callable]:
+def _get_spec(agent_id: str) -> AgentSpec:
     global agent_registry
 
-    if id in agent_registry:
-        spec = agent_registry[id]
-        return spec.agent_factory, spec.training_wrapper
+    if agent_id in agent_registry:
+        spec = agent_registry[agent_id]
+        return spec
     else:
         raise AgentNotFound
 
 
+def get_agent(
+        agent_id: str
+) -> Tuple[Callable, Callable]:
+    spec = _get_spec(agent_id)
+    return spec.agent_factory, spec.training_wrapper
+
+
+def get_agent_graphing(agent_id: str) -> Callable[[Dict], None]:
+    spec = _get_spec(agent_id)
+    return spec.graphing_wrapper
+
+
 def register_wrapper(
-        id: str,
+        wrapper_id: str,
         wrapper_factory: Callable[[gym.Env], gym.Wrapper]
 ):
     """Register a wrapper with Talos."""
     global wrapper_registry
 
     wrapper_spec = WrapperSpec(
-        id=id,
+        id=wrapper_id,
         wrapper_factory=wrapper_factory
     )
 
-    wrapper_registry[id] = wrapper_spec
+    wrapper_registry[wrapper_id] = wrapper_spec
 
 
 def get_wrapper(

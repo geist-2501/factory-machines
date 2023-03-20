@@ -164,10 +164,7 @@ def train_dqn_agent(
 
     state, _ = env.reset()
 
-    if can_graph():
-        fig, axs = plt.subplots(1, 3, figsize=(12, 6))
-    else:
-        fig, axs = None, None
+    axs = _init_graphing()
 
     mean_reward_history = []
     loss_history = []
@@ -213,6 +210,14 @@ def train_dqn_agent(
             tqdm.write(f"iter: {step: 10.0f} eps: {agent.epsilon: 10.1f}\tscore: {score: 10.2f}\t loss: {loss: 10.2f}")
 
 
+def _init_graphing():
+    if can_graph():
+        fig, axs = plt.subplots(3, 1)
+    else:
+        fig, axs = None, None
+    return axs
+
+
 def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
     if can_graph() is False:
         return
@@ -230,6 +235,15 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
     axs[2].plot(smoothen(grad_norm_history))
 
     plt.pause(0.05)
+
+
+def dqn_graphing_wrapper(artifacts):
+    _update_graphs(
+        _init_graphing(),
+        mean_reward_history=artifacts["reward"],
+        loss_history=artifacts["loss"],
+        grad_norm_history=artifacts["grad_norm"]
+    )
 
 
 def dqn_training_wrapper(

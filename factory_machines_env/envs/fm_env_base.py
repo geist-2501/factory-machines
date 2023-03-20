@@ -62,6 +62,15 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             5
         ),
+        "slam-example": Map([
+            '....o.ww.',
+            'd.ww.....',
+            'wwwwwww..',
+            '....d....',
+        ],
+            [1, 2],
+            2
+        ),
     }
 
     colors = {

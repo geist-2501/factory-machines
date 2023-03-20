@@ -3,11 +3,12 @@ import time
 from typing import List, Dict
 
 import gym
+import matplotlib.pyplot as plt
 import torch
 
 from talos.agent import Agent
 from talos.error import *
-from talos.registration import get_agent, get_wrapper
+from talos.registration import get_agent, get_wrapper, get_agent_graphing
 
 
 def play_agent(
@@ -112,3 +113,9 @@ def create_env_factory(env_name, wrapper_name=None, render_mode=None, env_args=N
         return env
 
     return env_factory
+
+
+def graph_agent(agent_id: str, artifacts: Dict):
+    graphing_wrapper = get_agent_graphing(agent_id)
+    graphing_wrapper(artifacts)
+    plt.show()

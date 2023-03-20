@@ -25,21 +25,21 @@ register(
 )
 
 register_wrapper(
-    id='FMFlatten',
+    wrapper_id='FMFlatten',
     wrapper_factory=lambda outer: FactoryMachinesFlattenWrapper(outer)
 )
 
 register_wrapper(
-    id='FMFlattenRel',
+    wrapper_id='FMFlattenRel',
     wrapper_factory=lambda outer: FactoryMachinesFlattenRelativeWrapper(outer)
 )
 
 register_wrapper(
-    id='FMRel',
+    wrapper_id='FMRel',
     wrapper_factory=lambda outer: FactoryMachinesRelativeWrapper(outer)
 )
 
 register_wrapper(
-    id='Array',
+    wrapper_id='Array',
     wrapper_factory=lambda outer: ArrayWrapper(outer)
 )

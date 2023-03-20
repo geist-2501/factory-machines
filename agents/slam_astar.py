@@ -24,6 +24,7 @@ class SlamAstar:
         self.map = initial_obs
         len_y, len_x = initial_obs.shape
         self._origin = np.array([len_x // 2, len_y // 2])
+        self.debug_mode = False
 
     def astar(self, start: Coord, end: Coord) -> Optional[List[HCoord]]:
         start = tuple(start)
@@ -67,6 +68,7 @@ class SlamAstar:
         path = self.astar(start, end)
 
         if path is None or len(path) == 1:
+            self._log(f"Could not find path from {start} to {end}")
             return self.no_op
 
         curr_coord = path[0]  # Will always start with the current coord.
@@ -170,3 +172,21 @@ class SlamAstar:
             return self.left
 
         raise RuntimeError(f"Cannot convert ({d_x}, {d_y}) to unit direction.")
+
+    def _log(self, message):
+        if self.debug_mode:
+            print(f"SLAM> {message}")
+
+    def _print_map(self, points: List[Coord]):
+        if not self.debug_mode:
+            return
+
+        for y in range(len(self.map)):
+            for x in range(len(self.map[y])):
+                if self.map[y, x] == 1:
+                    print("W", end="")
+                elif (x, y) in points:
+                    print("#", end="")
+                else:
+                    print(".", end="")
+            print()
