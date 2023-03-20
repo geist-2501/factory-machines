@@ -30,8 +30,9 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             timestep_override: int = None,
             order_generator: OrderGenerator = None,
             verbose=False,
+            correct_obs=False
     ) -> None:
-        super().__init__(render_mode, map_id, agent_capacity, verbose)
+        super().__init__(render_mode, map_id, agent_capacity, verbose, correct_obs)
 
         if order_generator is None:
             self._order_generator = GaussianOrderGenerator(self._map.p, self._map.max_order_size)

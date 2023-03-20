@@ -1,21 +1,55 @@
-from typing import Tuple
+import math
+from collections import defaultdict, deque
+from typing import Tuple, List, Union, Optional, Deque
 
+import heapq
 import numpy as np
 
 Coord = np.ndarray
+HCoord = Tuple[int, int]  # Hashable coord.
 Obs = np.ndarray
 Bound = Tuple[Coord, Coord, Coord, Coord]
+
+
+def manhatten_heuristic(start: HCoord, end: HCoord) -> int:
+    return abs(start[0] - end[0]) + abs(start[1] - end[1])
 
 
 class SlamAstar:
     """Implementation of Simultaneous Localization and Mapping for A*."""
 
-    up, down, left, right, no_op = range(5)
+    up, left, down, right, no_op = range(5)
 
     def __init__(self, initial_obs: Obs):
         self.map = initial_obs
         len_y, len_x = initial_obs.shape
         self._origin = np.array([len_x // 2, len_y // 2])
+
+    def astar(self, start: Coord, end: Coord) -> Optional[List[HCoord]]:
+        start = tuple(start)
+        end = tuple(end)
+        connections = {
+            start: None
+        }
+        queue = [(0.0, start)]
+        lengths = defaultdict(lambda: math.inf)
+        lengths[start] = 0
+
+        while queue:
+            _, node = heapq.heappop(queue)
+            if node == end:
+                path = self._construct_path(connections, node, start)
+                return path
+
+            for neighbour in self._get_neighbours(node):
+                path_length = lengths[node] + 1
+                if path_length < lengths[neighbour]:
+                    connections[neighbour] = node
+                    lengths[neighbour] = path_length
+                    f = path_length + manhatten_heuristic(neighbour, end)
+                    heapq.heappush(queue, (f, neighbour))
+
+        return None
 
     def update(self, location: Coord, local_obs: Obs):
         """Update the understanding of the map."""
@@ -29,8 +63,16 @@ class SlamAstar:
     def path_to(self, start: Coord, end: Coord) -> int:
         """Get the next direction in the path from start to end."""
         self._expand(end)
-        # TODO
-        return self.no_op
+
+        path = self.astar(start, end)
+
+        if path is None or len(path) == 1:
+            return self.no_op
+
+        curr_coord = path[0]  # Will always start with the current coord.
+        next_coord = path[1]
+
+        return self._to_direction(curr_coord, next_coord)
 
     def _is_oob(self, point: Coord) -> bool:
         """Check if `point` is out-of-bounds. Note that `point` should be in map-space."""
@@ -87,3 +129,44 @@ class SlamAstar:
             center + bottom_left_offset, \
             center + top_left_offset, \
             center + top_right_offset
+
+    def _get_neighbours(self, coord: HCoord) -> List[HCoord]:
+        offsets = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+        neighbours = list(map(lambda o: self._add_hcoord(coord, o), offsets))
+        valid_neighbours = []
+        for neighbour in neighbours:
+            neighbour_coord = np.array(neighbour)
+            if not self._is_oob(neighbour_coord) and self._get_map(neighbour_coord) != 1:
+                valid_neighbours.append(neighbour)
+
+        return valid_neighbours
+
+    @staticmethod
+    def _add_hcoord(a: HCoord, b: HCoord) -> HCoord:
+        return a[0] + b[0], a[1] + b[1]
+
+    @staticmethod
+    def _construct_path(connections, node, start) -> List:
+        path = [node]
+        while node != start:
+            node = connections[node]
+            path.append(node)
+        path.reverse()
+        return path
+
+    def _to_direction(self, a: HCoord, b: HCoord) -> int:
+        a_x, a_y = a
+        b_x, b_y = b
+        d_x = b_x - a_x
+        d_y = b_y - a_y
+
+        if d_x == 0 and d_y == -1:
+            return self.up
+        elif d_x == 0 and d_y == 1:
+            return self.down
+        elif d_x == 1 and d_y == 0:
+            return self.right
+        elif d_x == -1 and d_y == 0:
+            return self.left
+
+        raise RuntimeError(f"Cannot convert ({d_x}, {d_y}) to unit direction.")

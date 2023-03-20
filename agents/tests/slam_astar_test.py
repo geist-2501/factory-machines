@@ -65,6 +65,38 @@ class SlamAstarTest(unittest.TestCase):
 
         self.assertListEqual(slam.map.tolist(), expected_map.tolist())
 
+    def test_should_calc_simple_path(self):
+        blank_obs = np.zeros((3, 3))
+        slam = SlamAstar(blank_obs)
+        slam.update(np.array([2, 2]), blank_obs)
+
+        path = slam.astar(np.array([0, 0]), np.array([3, 2]))
+
+        self.assertIsNotNone(path)
+        self.assertEqual(len(path), 6)
+        self.assertEqual(path[0], (0, 0))
+        self.assertEqual(path[5], (3, 2))
+
+    def test_should_calc_path_around_wall(self):
+        initial_obs = np.array([
+            [0, 0, 1],
+            [0, 0, 1],
+            [0, 0, 0],
+        ])
+        slam = SlamAstar(initial_obs)
+        slam.update(np.array([2, 0]), np.array([
+            [1, 0, 0],
+            [1, 0, 0],
+            [0, 0, 0],
+        ]))
+
+        path = slam.astar(np.array([0, 0]), np.array([2, -1]))
+
+        self.assertIsNotNone(path)
+        self.assertEqual(len(path), 6)
+        self.assertEqual(path[0], (0, 0))
+        self.assertEqual(path[5], (2, -1))
+
 
 if __name__ == '__main__':
     unittest.main()
