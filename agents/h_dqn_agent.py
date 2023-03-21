@@ -8,13 +8,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
+from gym import Env
 from tqdm import trange, tqdm
 
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer
-from agents.utils import can_graph, evaluate, smoothen, StaticLinearDecay, MeteredLinearDecay, parse_int_list
+from agents.utils import can_graph, evaluate, smoothen, MeteredLinearDecay, parse_int_list
 from talos import Agent
-
 
 DictObsType = TypeVar("DictObsType")
 FlatObsType = TypeVar("FlatObsType")
@@ -52,8 +52,8 @@ class HDQNAgent(Agent, ABC):
         self.n_goals = n_goals
         self.n_actions = n_actions
 
-        self.d1 = ReplayBuffer(10**4)
-        self.d2 = ReplayBuffer(10**4)
+        self.d1 = ReplayBuffer(10 ** 4)
+        self.d2 = ReplayBuffer(10 ** 4)
 
         self._q2_obs_size = len(self.to_q2(obs))
         self._q1_obs_size = len(self.to_q1(obs, 0))
@@ -83,11 +83,11 @@ class HDQNAgent(Agent, ABC):
         return compute_td_loss(states, actions, rewards, next_states, is_done, self.gamma, net, net_fixed)
 
     @abstractmethod
-    def get_intrinsic_reward(self, obs: DictObsType,  action: ActType, next_obs: DictObsType, goal: ActType) -> float:
+    def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:
         raise NotImplementedError
 
     @abstractmethod
-    def goal_satisfied(self, obs: DictObsType, goal: ActType) -> bool:
+    def goal_satisfied(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -136,7 +136,6 @@ class HDQNAgent(Agent, ABC):
             opt,
             max_grad_norm
     ):
-
         (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
 
         loss = self.get_loss(s, a, r, s_dash, is_done, net, net_fixed)
@@ -192,6 +191,239 @@ class HDQNAgent(Agent, ABC):
     @staticmethod
     def _onehot(category, n_categories):
         return [1 if i == category else 0 for i in range(n_categories)]
+
+
+class HDQNTrainingWrapper:
+    def __init__(
+            self,
+            env_factory: Callable[[int], gym.Env],
+            agent: HDQNAgent,
+            artifacts: Dict,
+            config: configparser.SectionProxy
+    ) -> None:
+        self.env_factory = env_factory
+        self.agent = agent
+        self.artifacts = artifacts
+
+        self.num_episodes = config.getint("num_episodes")
+        self.max_timesteps = config.getint("total_steps")
+        self.replay_buffer_size = config.getint("replay_buffer_size")
+        self.batch_size = config.getint("batch_size")
+        self.eval_freq = config.getint("eval_freq"),
+
+        self.max_grad_norm = 1000
+
+        # Init the network shapes.
+        q1_hidden_layers = parse_int_list(config.get("q1_hidden_layers"))
+        q2_hidden_layers = parse_int_list(config.get("q2_hidden_layers"))
+        self.agent.set_hidden_layers(q1_hidden_layers, q2_hidden_layers)
+
+        # Init optimisers.
+        learning_rate = config.getfloat("learning_rate")
+        self.opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
+        self.opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
+
+        # Init all epsilons.
+        agent.eps1 = np.ones(agent.n_goals)
+        agent.eps2 = 1
+
+        decay_start = config.getfloat("init_epsilon")
+        decay_end = config.getfloat("final_epsilon")
+        decay_steps = config.getfloat("decay_steps")
+        self.epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps // agent.n_goals)
+                               for _ in range(agent.n_goals)]
+        self.epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
+
+        self.net_update_freq = 100
+
+        self.axs = self.init_graphing()
+        self.loss_history = np.empty(shape=(2, 0))
+        self.grad_norm_history = np.empty(shape=(2, 0))
+        self.mean_reward_history = []
+        self.epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
+
+    def train(self):
+        env = self.env_factory(0)
+        timekeeper = TimeKeeper()
+        obs, _ = env.reset()
+
+        # Init D1.
+        with trange(self.replay_buffer_size) as progress_bar:
+            progress_bar.set_description("D1 Prewarm")
+            while len(self.agent.d1) < self.replay_buffer_size:
+                random_goal = np.random.choice(self.agent.n_goals)
+                _, _, done = self.play_q1(env, obs, random_goal, learn_q1=False)
+                if done:
+                    obs, _ = env.reset()
+
+                progress_bar.update(len(self.agent.d1) - progress_bar.n)
+                progress_bar.refresh()
+
+        # Pretrain Q1.
+        obs, _ = env.reset()
+        with trange(self.num_episodes) as progress_bar:
+            progress_bar.set_description("D1 Training")
+            for _ in progress_bar:
+                random_goal = np.random.choice(self.agent.n_goals)
+                _, _, done = self.play_q1(env, obs, random_goal, learn_q1=True, timekeeper=timekeeper)
+                if done:
+                    obs, _ = env.reset()
+
+        # Init D2.
+        obs, _ = env.reset()
+        with trange(self.replay_buffer_size) as progress_bar:
+            progress_bar.set_description("D2 Prewarm")
+            while len(self.agent.d2) < self.replay_buffer_size:
+                self.play_q2(env, learn_q2=False, learn_q1=False)
+
+                progress_bar.update(len(self.agent.d2) - progress_bar.n)
+                progress_bar.refresh()
+
+        # Train Q1 & Q2.
+        with trange(self.num_episodes) as progress_bar:
+            progress_bar.set_description("Episodes")
+            for step in progress_bar:
+                obs, _ = env.reset()
+                self.play_q2(env, timekeeper=timekeeper)
+
+                epsilon_history = np.append(
+                    epsilon_history,
+                    [[self.agent.eps2, *self.agent.eps1]],
+                    axis=0
+                )
+                # loss_history = np.append(loss_history, ep_loss_history, axis=1)
+                # grad_norm_history = np.append(grad_norm_history, ep_grad_norm_history, axis=1)
+
+                if step % self.eval_freq == 0:
+                    # Perform an evaluation.
+                    self.evaluate_and_graph(seed=step, timekeeper=timekeeper)
+
+    def play_q2(
+            self,
+            env: gym.Env,
+            learn_q1=True,
+            learn_q2=True,
+            timekeeper: TimeKeeper = None
+    ):
+        # Update the meta-controller's epsilon at the start of each episode.
+        if learn_q2:
+            self.agent.eps2 = self.epsilon2_decay.next()
+
+        obs, _ = env.reset()
+        for _ in trange(self.max_timesteps, leave=False):
+            # Get goal.
+            goal = self.agent.get_epsilon_goal(obs)
+
+            # Take meta-step.
+            next_obs, reward, is_done = self.play_q1(env, obs, goal, learn_q1)
+
+            # Add to replay buffer.
+            self.agent.d2.add(
+                self.agent.to_q2(obs),
+                goal,
+                reward,
+                self.agent.to_q2(next_obs),
+                is_done
+            )
+
+            if learn_q2:
+                q2_loss, q2_grad_norm = self.agent.update_net(
+                    net=self.agent.q2_net,
+                    net_fixed=self.agent.q2_net_fixed,
+                    buffer=self.agent.d2,
+                    opt=self.opt2,
+                    batch_size=self.batch_size,
+                    max_grad_norm=self.max_grad_norm
+                )
+
+            if timekeeper:
+                timekeeper.meta_steps += 1
+
+                if timekeeper.meta_steps % self.net_update_freq == 0:
+                    self.agent.update_q2_fixed()
+
+            if is_done:
+                break
+
+    def play_q1(
+            self,
+            env: gym.Env,
+            obs: DictObsType,
+            goal: ActType,
+            learn_q1=True,
+            timekeeper: TimeKeeper = None
+    ) -> Tuple[DictObsType, int, bool]:
+        ext_r = 0
+        for step in range(self.max_timesteps):
+
+            action = self.agent.get_epsilon_action(obs, goal)
+
+            # Step the env and get extrinsic reward for the meta-controller.
+            next_obs, r, done, _, _ = env.step(action)
+            ext_r += r
+
+            # Get intrinsic reward for the controller.
+            int_r = self.agent.get_intrinsic_reward(obs, action, next_obs, goal)
+
+            self.agent.d1.add(self.agent.to_q1(obs, goal), action, int_r, self.agent.to_q1(next_obs, goal), done)
+
+            if learn_q1:
+                q1_loss, q1_grad_norm = self.agent.update_net(
+                    net=self.agent.q1_net,
+                    net_fixed=self.agent.q1_net_fixed,
+                    buffer=self.agent.d1,
+                    opt=self.opt1,
+                    batch_size=self.batch_size,
+                    max_grad_norm=self.max_grad_norm
+                )
+
+            if timekeeper:
+                timekeeper.steps += 1
+
+                if timekeeper.steps % self.net_update_freq == 0:
+                    self.agent.update_q1_fixed()
+
+            if self.agent.goal_satisfied(obs, action, next_obs, goal) or done:
+                # Update the epsilon for the completed goal.
+                if learn_q1:
+                    self.agent.eps1[goal] = self.epsilon1_decay[goal].next()
+                return obs, ext_r, done
+
+        return obs, ext_r, False
+
+    @staticmethod
+    def init_graphing():
+        if can_graph():
+            fig, axs = plt.subplots(2, 2, figsize=(12, 12))
+            axs = np.array(axs).flatten()
+            axs1twin = axs[1].twinx()
+            axs2twin = axs[2].twinx()
+            axs = np.insert(axs, 2, axs1twin)
+            axs = np.insert(axs, 4, axs2twin)
+        else:
+            fig, axs = None, None
+
+        return axs
+
+    def evaluate_and_graph(self, seed, timekeeper: TimeKeeper):
+
+        score = evaluate(self.env_factory(seed), self.agent, n_episodes=3, max_episode_steps=500)
+        self.mean_reward_history.append(score)
+
+        _update_graphs(
+            self.axs,
+            self.mean_reward_history,
+            self.loss_history,
+            self.grad_norm_history,
+            self.epsilon_history
+        )
+
+        self.artifacts["loss"] = self.loss_history
+        self.artifacts["grad_norm"] = self.grad_norm_history
+        self.artifacts["mean_reward"] = self.mean_reward_history
+        self.artifacts["epsilon"] = self.epsilon_history
+
+        tqdm.write(f"Timesteps: {timekeeper.steps}, meta steps: {timekeeper.meta_steps}")
 
 
 def _play_episode(
@@ -287,7 +519,7 @@ def _play_episode(
                 q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
 
         timelimit_exceeded = meta_t > meta_action_timelimit if meta_action_timelimit else False
-        if agent.goal_satisfied(next_s, g) or timelimit_exceeded:
+        if agent.goal_satisfied(s, a, next_s, g) or timelimit_exceeded:
             # End of the meta-action.
             agent.d2.add(agent.to_q2(meta_s), g, ext_r, agent.to_q2(next_s), done)
 
@@ -309,145 +541,18 @@ def _play_episode(
         np.array([q1_grad_norm_history, q2_grad_norm_history])
 
 
-def train_h_dqn_agent(
-        env_factory: Callable[[int], gym.Env],
-        agent: HDQNAgent,
-        artifacts: Dict,
-        q1_hidden_layers,
-        q2_hidden_layers,
-        learning_rate=1e-4,
-        num_episodes: int = 100,
-        max_timesteps=1000,
-        replay_buffer_size=10**4,
-        batch_size=32,
-        max_grad_norm=1000,
-        eval_freq=5,
-        decay_start=1,
-        decay_end=0.1,
-        decay_steps=10**4
-):
-    """Train the h-DQN agent following the algorithm outlined by Kulkarni et al. 2016."""
-    # Init graphing.
-    if can_graph():
-        fig, axs = plt.subplots(2, 2, figsize=(12, 12))
-        axs = np.array(axs).flatten()
-        axs1twin = axs[1].twinx()
-        axs2twin = axs[2].twinx()
-        axs = np.insert(axs, 2, axs1twin)
-        axs = np.insert(axs, 4, axs2twin)
-    else:
-        fig, axs = None, None
-
-    loss_history = np.empty(shape=(2, 0))
-    grad_norm_history = np.empty(shape=(2, 0))
-    mean_reward_history = []
-    epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
-
-    # Init the network shapes.
-    agent.set_hidden_layers(q1_hidden_layers, q2_hidden_layers)
-
-    # Init optimisers.
-    opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
-    opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
-
-    # Init all epsilons.
-    agent.eps1 = np.ones(agent.n_goals)
-    agent.eps2 = 1
-
-    epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps // agent.n_goals)
-                      for _ in range(agent.n_goals)]
-    epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
-
-    env = env_factory(0)
-    s, _ = env.reset()
-
-    # Init D1 & D2.
-    agent.set_replay_buffer_size(replay_buffer_size)
-    replay_bar = tqdm(range(replay_buffer_size))
-    replay_bar.set_description("Filling buffer")
-    while len(agent.d1) < replay_buffer_size or len(agent.d2) < replay_buffer_size:
-        _play_episode(
-            env=env,
-            agent=agent,
-            opt1=opt1,
-            opt2=opt2,
-            batch_size=batch_size,
-            max_grad_norm=max_grad_norm,
-            max_timesteps=replay_buffer_size,
-            learn=False
-        )
-
-        replay_bar.update(len(agent.d2) - replay_bar.n)
-        replay_bar.refresh()
-
-    replay_bar.close()
-
-    # The actual training loop.
-    timekeeper = TimeKeeper()
-    for ep in trange(0, num_episodes):
-        ep_loss_history, ep_grad_norm_history = _play_episode(
-            env=env,
-            agent=agent,
-            opt1=opt1,
-            opt2=opt2,
-            batch_size=batch_size,
-            max_grad_norm=max_grad_norm,
-            max_timesteps=max_timesteps,
-            learn=True,
-            timekeeper=timekeeper,
-            epsilon1_decay=epsilon1_decay,
-            epsilon2_decay=epsilon2_decay,
-            show_progress=True,
-            meta_action_timelimit=None
-        )
-
-        epsilon_history = np.append(
-            epsilon_history,
-            [[agent.eps2, *agent.eps1]],
-            axis=0
-        )
-
-        loss_history = np.append(loss_history, ep_loss_history, axis=1)
-        grad_norm_history = np.append(grad_norm_history, ep_grad_norm_history, axis=1)
-
-        if ep % eval_freq == 0:
-            score = evaluate(env_factory(ep), agent, n_episodes=3, max_episode_steps=500)
-            mean_reward_history.append(
-                score
-            )
-
-            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history)
-
-            artifacts["loss"] = loss_history
-            artifacts["grad_norm"] = grad_norm_history
-            artifacts["mean_reward"] = mean_reward_history
-            artifacts["epsilon"] = epsilon_history
-
-            tqdm.write(f"Timesteps: {timekeeper.steps}, meta steps: {timekeeper.meta_steps}")
-
-
 def hdqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
         dqn_config: configparser.SectionProxy,
         artifacts: Dict
 ):
-    train_h_dqn_agent(
-        env_factory=env_factory,
-        agent=agent,
-        artifacts=artifacts,
-        learning_rate=dqn_config.getfloat("learning_rate"),
-        num_episodes=dqn_config.getint("num_episodes"),
-        max_timesteps=dqn_config.getint("total_steps"),
-        replay_buffer_size=dqn_config.getint("replay_buffer_size"),
-        batch_size=dqn_config.getint("batch_size"),
-        decay_start=dqn_config.getfloat("init_epsilon"),
-        decay_end=dqn_config.getfloat("final_epsilon"),
-        decay_steps=dqn_config.getfloat("decay_steps"),
-        eval_freq=dqn_config.getint("eval_freq"),
-        q1_hidden_layers=parse_int_list(dqn_config.get("q1_hidden_layers")),
-        q2_hidden_layers=parse_int_list(dqn_config.get("q2_hidden_layers"))
-    )
+    HDQNTrainingWrapper(
+        env_factory,
+        agent,
+        artifacts,
+        dqn_config
+    ).train()
 
 
 def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history):
@@ -479,7 +584,7 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     axs[4].set_ylabel("Q2", color="blue")
 
     for i in range(epsilon_history.shape[1]):
-        label = "Q2" if i == 0 else f"Q1-{i-1}"
+        label = "Q2" if i == 0 else f"Q1-{i - 1}"
         axs[5].plot(epsilon_history[:, i], label=label)
 
     axs[5].legend()

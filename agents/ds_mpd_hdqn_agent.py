@@ -12,8 +12,8 @@ class DiscreteStochasticHDQNAgent(HDQNAgent):
     def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:
         return 1 if self.goal_satisfied(next_obs, goal) else 0
 
-    def goal_satisfied(self, obs: DictObsType, goal: ActType) -> bool:
-        current_state = np.argmax(obs)
+    def goal_satisfied(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> bool:
+        current_state = np.argmax(next_obs)
         return current_state == goal
 
     def to_q1(self, obs: DictObsType, goal: ActType) -> FlatObsType:

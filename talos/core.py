@@ -43,30 +43,6 @@ def play_agent(
 
 def evaluate_agents(loaded_agents: List[Dict]):
     raise NotImplementedError
-    # reward_histories = []
-    # info_histories = []
-    # env_name = None
-    # for agent in loaded_agents:
-    #     env = env_factory(0)
-    #     env_name = type(env).__name__
-    #     rewards, infos = play_agent(agent, env)
-    #     reward_histories.append(rewards)
-    #     info_histories.append(infos)
-    #
-    # reward_histories = utils.pad(reward_histories)
-    #
-    # fig, axs = plt.subplots(1, 2, figsize=(8, 4))
-    # for i in range(len(agents)):
-    #     axs[0].plot(np.cumsum(reward_histories[i]), label=agent_names[i])
-    # axs[1].bar(agent_names, np.sum(reward_histories, axis=1))
-    #
-    # axs[0].legend()
-    # axs[0].set_ylabel("Accumulated Reward")
-    # axs[1].set_ylabel("Final Reward")
-    # fig.suptitle(f"{' vs '.join(agent_names)} in {env_name}")
-    # fig.tight_layout()
-    #
-    # plt.show()
 
 
 def load_config(config_path: str) -> configparser.ConfigParser:
