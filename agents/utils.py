@@ -2,9 +2,9 @@ from typing import Dict, List
 
 import gym
 import numpy as np
-from talos import Agent
 from scipy.ndimage.filters import uniform_filter1d
 
+from talos import Agent
 
 try:
     import tkinter
@@ -51,7 +51,7 @@ def evaluate(
         agent: Agent,
         n_episodes=1,
         max_episode_steps=10000
-):
+) -> float:
     total_ep_rewards = []
     for _ in range(n_episodes):
         s, _ = env.reset()
@@ -66,7 +66,7 @@ def evaluate(
                 break
 
         total_ep_rewards.append(total_ep_reward)
-    return np.mean(total_ep_rewards)
+    return np.mean(total_ep_rewards).item()
 
 
 def flatten(obs: Dict) -> List:

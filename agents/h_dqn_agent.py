@@ -8,12 +8,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-from gym import Env
+from matplotlib.gridspec import GridSpec
 from tqdm import trange, tqdm
 
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer
-from agents.utils import can_graph, evaluate, smoothen, MeteredLinearDecay, parse_int_list
+from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list
 from talos import Agent
 
 DictObsType = TypeVar("DictObsType")
@@ -100,13 +100,16 @@ class HDQNAgent(Agent, ABC):
         """Process an observation before being fed to Q2."""
         return obs
 
-    def get_action(self, obs: DictObsType, extra_state=None) -> Tuple[ActType, Any]:
+    def get_action(self, obs: DictObsType, extra_state=None, only_q1=False) -> Tuple[ActType, Any]:
         """Get the optimal action given a state."""
         goal = extra_state  # Treat the extra state we're given as the goal.
         if goal is None:
-            # If no goal is given, get one from the meta-controller.
-            meta_controller_obs = self.to_q2(obs)
-            goal = self.get_epsilon(meta_controller_obs, epsilon=0, net=self.q2_net)
+            if only_q1:
+                goal = np.random.choice(self.n_goals)
+            else:
+                # If no goal is given, get one from the meta-controller.
+                meta_controller_obs = self.to_q2(obs)
+                goal = self.get_epsilon(meta_controller_obs, epsilon=0, net=self.q2_net)
 
         # Get an action from the controller, incorporating the goal.
         controller_obs = self.to_q1(obs, goal)
@@ -206,10 +209,10 @@ class HDQNTrainingWrapper:
         self.artifacts = artifacts
 
         self.num_episodes = config.getint("num_episodes")
-        self.max_timesteps = config.getint("total_steps")
+        self.ep_max_timesteps = config.getint("total_steps")
         self.replay_buffer_size = config.getint("replay_buffer_size")
         self.batch_size = config.getint("batch_size")
-        self.eval_freq = config.getint("eval_freq"),
+        self.eval_freq = config.getint("eval_freq")
 
         self.max_grad_norm = 1000
 
@@ -235,11 +238,15 @@ class HDQNTrainingWrapper:
         self.epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
 
         self.net_update_freq = 100
+        self.gather_freq = 50
 
         self.axs = self.init_graphing()
-        self.loss_history = np.empty(shape=(2, 0))
-        self.grad_norm_history = np.empty(shape=(2, 0))
-        self.mean_reward_history = []
+        self.q1_loss_history = []
+        self.q2_loss_history = []
+        self.q1_grad_norm_history = []
+        self.q2_grad_norm_history = []
+        self.q1_mean_reward_history = []
+        self.q2_mean_reward_history = []
         self.epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
 
     def train(self):
@@ -263,11 +270,21 @@ class HDQNTrainingWrapper:
         obs, _ = env.reset()
         with trange(self.num_episodes) as progress_bar:
             progress_bar.set_description("D1 Training")
-            for _ in progress_bar:
+            for step in progress_bar:
                 random_goal = np.random.choice(self.agent.n_goals)
                 _, _, done = self.play_q1(env, obs, random_goal, learn_q1=True, timekeeper=timekeeper)
                 if done:
                     obs, _ = env.reset()
+
+                self.epsilon_history = np.append(
+                    self.epsilon_history,
+                    [[self.agent.eps2, *self.agent.eps1]],
+                    axis=0
+                )
+
+                if step % self.eval_freq == 0:
+                    # Perform an evaluation.
+                    self.evaluate_and_graph(seed=step, timekeeper=timekeeper, only_q1=True)
 
         # Init D2.
         obs, _ = env.reset()
@@ -286,13 +303,11 @@ class HDQNTrainingWrapper:
                 obs, _ = env.reset()
                 self.play_q2(env, timekeeper=timekeeper)
 
-                epsilon_history = np.append(
-                    epsilon_history,
+                self.epsilon_history = np.append(
+                    self.epsilon_history,
                     [[self.agent.eps2, *self.agent.eps1]],
                     axis=0
                 )
-                # loss_history = np.append(loss_history, ep_loss_history, axis=1)
-                # grad_norm_history = np.append(grad_norm_history, ep_grad_norm_history, axis=1)
 
                 if step % self.eval_freq == 0:
                     # Perform an evaluation.
@@ -310,7 +325,7 @@ class HDQNTrainingWrapper:
             self.agent.eps2 = self.epsilon2_decay.next()
 
         obs, _ = env.reset()
-        for _ in trange(self.max_timesteps, leave=False):
+        for _ in trange(self.ep_max_timesteps, leave=False):
             # Get goal.
             goal = self.agent.get_epsilon_goal(obs)
 
@@ -336,11 +351,15 @@ class HDQNTrainingWrapper:
                     max_grad_norm=self.max_grad_norm
                 )
 
-            if timekeeper:
-                timekeeper.meta_steps += 1
+                if timekeeper:
+                    timekeeper.meta_steps += 1
 
-                if timekeeper.meta_steps % self.net_update_freq == 0:
-                    self.agent.update_q2_fixed()
+                    if timekeeper.meta_steps % self.net_update_freq == 0:
+                        self.agent.update_q2_fixed()
+
+                    if timekeeper.meta_steps % self.gather_freq == 0:
+                        self.q2_loss_history.append(q2_loss.data.cpu().numpy())
+                        self.q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
 
             if is_done:
                 break
@@ -353,8 +372,9 @@ class HDQNTrainingWrapper:
             learn_q1=True,
             timekeeper: TimeKeeper = None
     ) -> Tuple[DictObsType, int, bool]:
+
         ext_r = 0
-        for step in range(self.max_timesteps):
+        for step in range(self.ep_max_timesteps):
 
             action = self.agent.get_epsilon_action(obs, goal)
 
@@ -377,11 +397,15 @@ class HDQNTrainingWrapper:
                     max_grad_norm=self.max_grad_norm
                 )
 
-            if timekeeper:
-                timekeeper.steps += 1
+                if timekeeper:
+                    timekeeper.steps += 1
 
-                if timekeeper.steps % self.net_update_freq == 0:
-                    self.agent.update_q1_fixed()
+                    if timekeeper.steps % self.net_update_freq == 0:
+                        self.agent.update_q1_fixed()
+
+                    if timekeeper.steps % self.gather_freq == 0:
+                        self.q1_loss_history.append(q1_loss.data.cpu().numpy())
+                        self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
 
             if self.agent.goal_satisfied(obs, action, next_obs, goal) or done:
                 # Update the epsilon for the completed goal.
@@ -392,39 +416,75 @@ class HDQNTrainingWrapper:
         return obs, ext_r, False
 
     @staticmethod
+    def evaluate_hdqn(
+            env: gym.Env,
+            agent: HDQNAgent,
+            n_episodes=1,
+            max_episode_steps=10000,
+            only_q1=False
+    ) -> Tuple[float, float]:
+        extrinsic_rewards = []
+        intrinsic_rewards = []
+        for _ in range(n_episodes):
+            s, _ = env.reset()
+            total_extrinsic_reward = 0
+            total_intrinsic_reward = 0
+            goal = None
+            for _ in range(max_episode_steps):
+                a, goal = agent.get_action(s, goal, only_q1=only_q1)
+                next_s, r, done, _, _ = env.step(a)
+                total_extrinsic_reward += r
+                total_intrinsic_reward += agent.get_intrinsic_reward(s, a, next_s, goal)
+                s = next_s
+
+                if done:
+                    break
+
+            extrinsic_rewards.append(total_extrinsic_reward if only_q1 is False else np.nan)
+            intrinsic_rewards.append(total_intrinsic_reward)
+        return np.mean(extrinsic_rewards).item(), np.mean(intrinsic_rewards).item()
+
+    @staticmethod
     def init_graphing():
         if can_graph():
-            fig, axs = plt.subplots(2, 2, figsize=(12, 12))
-            axs = np.array(axs).flatten()
-            axs1twin = axs[1].twinx()
-            axs2twin = axs[2].twinx()
-            axs = np.insert(axs, 2, axs1twin)
-            axs = np.insert(axs, 4, axs2twin)
+            fig = plt.figure(layout="constrained")
+            gs = GridSpec(2, 3, figure=fig)
+            ax_reward = fig.add_subplot(gs[0, :-1])
+            ax_epsilon = fig.add_subplot(gs[0, -1:])
+            ax_loss = fig.add_subplot(gs[1, :-1])
+            ax_grad_norm = fig.add_subplot(gs[1, -1:])
+            axs = (ax_reward, ax_epsilon, ax_loss, ax_grad_norm)
         else:
             fig, axs = None, None
 
         return axs
 
-    def evaluate_and_graph(self, seed, timekeeper: TimeKeeper):
+    def evaluate_and_graph(self, seed, timekeeper: TimeKeeper, only_q1=False):
 
-        score = evaluate(self.env_factory(seed), self.agent, n_episodes=3, max_episode_steps=500)
-        self.mean_reward_history.append(score)
+        extrinsic_score, intrinsic_score = self.evaluate_hdqn(
+            self.env_factory(seed),
+            self.agent,
+            n_episodes=3,
+            max_episode_steps=500,
+            only_q1=only_q1
+        )
+        self.q2_mean_reward_history.append(extrinsic_score)
+        self.q1_mean_reward_history.append(intrinsic_score)
 
         _update_graphs(
             self.axs,
-            self.mean_reward_history,
-            self.loss_history,
-            self.grad_norm_history,
+            (self.q1_mean_reward_history, self.q2_mean_reward_history),
+            (self.q1_loss_history, self.q2_loss_history),
+            (self.q1_grad_norm_history, self.q2_grad_norm_history),
             self.epsilon_history
         )
 
-        self.artifacts["loss"] = self.loss_history
-        self.artifacts["grad_norm"] = self.grad_norm_history
-        self.artifacts["mean_reward"] = self.mean_reward_history
-        self.artifacts["epsilon"] = self.epsilon_history
+        # self.artifacts["loss"] = (self.q1_loss_history, self.q1_loss_history)
+        # self.artifacts["grad_norm"] = (self.q1_loss_history, self.q1_loss_history)
+        # self.artifacts["mean_reward"] = self.mean_reward_history
+        # self.artifacts["epsilon"] = self.epsilon_history
 
         tqdm.write(f"Timesteps: {timekeeper.steps}, meta steps: {timekeeper.meta_steps}")
-
 
 def _play_episode(
         env: gym.Env,
@@ -559,35 +619,30 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     if can_graph() is False:
         return
 
-    axs[0].cla()
-    axs[1].cla()
-    axs[2].cla()
-    axs[3].cla()
-    axs[4].cla()
-    axs[5].cla()
+    ax_reward, ax_epsilon, ax_loss, ax_grad_norm = axs
 
-    axs[0].set_title("Mean Reward")
-    axs[1].set_title("Loss")
-    axs[3].set_title("Grad Norm")
-    axs[5].set_title("Epsilon")
+    ax_reward.cla()
+    ax_epsilon.cla()
+    ax_loss.cla()
+    ax_grad_norm.cla()
 
-    axs[0].plot(mean_reward_history)
+    ax_reward.set_title("Mean Reward")
+    ax_epsilon.set_title("Epsilon")
+    ax_loss.set_title("Loss")
+    ax_grad_norm.set_title("Grad Norm")
 
-    axs[1].plot(smoothen(loss_history[0]), color="red")
-    axs[1].set_ylabel("Q1", color="red")
-    axs[2].plot(smoothen(loss_history[1]), color="blue")
-    axs[2].set_ylabel("Q2", color="blue")
+    ax_reward.plot(mean_reward_history[0])
+    ax_reward.plot(mean_reward_history[1])
 
-    axs[3].plot(smoothen(grad_norm_history[0]), color="red")
-    axs[3].set_ylabel("Q1", color="red")
-    axs[4].plot(smoothen(grad_norm_history[1]), color="blue")
-    axs[4].set_ylabel("Q2", color="blue")
+    ax_loss.plot(smoothen(loss_history[0]))
+    ax_loss.plot(smoothen(loss_history[1]))
 
     for i in range(epsilon_history.shape[1]):
         label = "Q2" if i == 0 else f"Q1-{i - 1}"
-        axs[5].plot(epsilon_history[:, i], label=label)
+        ax_epsilon.plot(epsilon_history[:, i], label=label)
+    ax_epsilon.legend()
 
-    axs[5].legend()
+    ax_grad_norm.plot(smoothen(grad_norm_history[0]))
+    ax_grad_norm.plot(smoothen(grad_norm_history[1]))
 
-    plt.tight_layout()
     plt.pause(0.05)
