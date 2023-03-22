@@ -87,6 +87,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     _item_dropoff_reward = 1
     _collision_punishment = -0.1
 
+    up, left, right, down, grab = range(5)
+
     def __init__(
             self,
             render_mode: Optional[str] = None,
@@ -195,7 +197,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
         # Process actions.
         action_reward = 0
-        if action < 4:
+        if action < self.grab:
             # Action is a move op.
             direction = self._action_to_direction[action]
             new_pos = self._agent_loc + direction
@@ -205,7 +207,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
                 self._history.log("Agent bumped into a wall.")
             else:
                 self._agent_loc = new_pos
-        elif action == 4:
+        elif action == self.grab:
             # Action is a grab op.
             action_reward = self._try_grab()
 
