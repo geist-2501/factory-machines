@@ -143,8 +143,6 @@ class HDQNAgent(Agent, ABC):
 
         loss = self.get_loss(s, a, r, s_dash, is_done, net, net_fixed)
 
-        net_fixed.load_state_dict(net.state_dict())
-
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
         opt.step()
@@ -466,8 +464,8 @@ class HDQNTrainingWrapper:
         q1_loss = np.mean(self.q1_loss_history[-10:]).item()
         q2_loss = np.mean(self.q2_loss_history[-10:]).item()
         tqdm.write(f"T[Q1: {timekeeper.steps}, Q2: {timekeeper.meta_steps}], "
-                   f"R[Q1: {intrinsic_score}, Q2: {extrinsic_score}], "
-                   f"L[Q1: {q1_loss}, Q2: {q2_loss}]")
+                   f"R[Q1: {intrinsic_score:.2f}, Q2: {extrinsic_score:.2f}], "
+                   f"L[Q1: {q1_loss:.2f}, Q2: {q2_loss:.2f}]")
 
 
 def hdqn_training_wrapper(
