@@ -61,10 +61,12 @@ class HDQNAgent(Agent, ABC):
         # Meta-controller Q network / Q2.
         self.q2_net = DQN(self._q2_obs_size, self.n_goals, device=device)
         self.q2_net_fixed = DQN(self._q2_obs_size, self.n_goals, device=device)
+        self.update_q2_fixed()
 
         # Controller Q network / Q1.
         self.q1_net = DQN(self._q1_obs_size, self.n_actions, device=device)
         self.q1_net_fixed = DQN(self._q1_obs_size, self.n_actions, device=device)
+        self.update_q1_fixed()
 
     def set_replay_buffer_size(self, size):
         self.d1 = ReplayBuffer(size)
@@ -185,9 +187,11 @@ class HDQNAgent(Agent, ABC):
     def set_hidden_layers(self, q1_hidden_layers: List[int], q2_hidden_layers: List[int]):
         self.q1_net.set_hidden_layers(q1_hidden_layers)
         self.q1_net_fixed.set_hidden_layers(q1_hidden_layers)
+        self.update_q1_fixed()
 
         self.q2_net.set_hidden_layers(q2_hidden_layers)
         self.q2_net_fixed.set_hidden_layers(q2_hidden_layers)
+        self.update_q2_fixed()
 
     @staticmethod
     def _onehot(category, n_categories):
