@@ -10,7 +10,7 @@ class Agent(ABC):
         self.name = name
 
     @abstractmethod
-    def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
+    def get_action(self, obs, extra_state=None) -> Tuple[int, Any]:
         """Request an action."""
         pass
 

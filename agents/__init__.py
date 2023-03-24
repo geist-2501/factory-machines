@@ -1,3 +1,4 @@
+from agents.fm_nn_agent import FMNNAgent
 from agents.fm_simple_heuristic_agent import FMSimpleHeuristicAgent
 from talos import register_agent
 from agents.dqn_agent import DQNAgent, dqn_training_wrapper, dqn_graphing_wrapper
@@ -28,4 +29,9 @@ register_agent(
 register_agent(
     agent_id="FM-Simple",
     agent_factory=lambda obs, n_actions, device: FMSimpleHeuristicAgent(obs, n_actions, device),
+)
+
+register_agent(
+    agent_id="FM-NN-Heuristic",
+    agent_factory=lambda obs, n_actions, device: FMNNAgent(obs, n_actions, device),
 )

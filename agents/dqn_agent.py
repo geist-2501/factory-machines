@@ -57,8 +57,8 @@ class DQNAgent(Agent):
             self.target_net
         )
 
-    def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
-        return self.get_optimal_actions(state), extra_state
+    def get_action(self, obs, extra_state=None) -> Tuple[int, Any]:
+        return self.get_optimal_actions(obs), extra_state
 
     def get_epsilon_actions(self, states: np.ndarray):
         """Pick actions according to an epsilon greedy strategy."""

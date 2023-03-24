@@ -24,11 +24,11 @@ class FMSimpleHeuristicAgent(Agent):
 
         self._last_idle = self._up
 
-    def get_action(self, state, extra_state=None) -> Tuple[int, Any]:
+    def get_action(self, obs, extra_state=None) -> Tuple[int, Any]:
 
-        agent_obs = state["agent_obs"].reshape(3, 3)
-        agent_loc = state["agent_loc"]
-        depot_queues = state["depot_queues"]
+        agent_obs = obs["agent_obs"].reshape(3, 3)
+        agent_loc = obs["agent_loc"]
+        depot_queues = obs["depot_queues"]
         target_depot = extra_state
 
         self._nav.update(agent_loc, agent_obs)

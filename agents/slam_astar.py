@@ -63,6 +63,7 @@ class SlamAstar:
 
     def path_to(self, start: Coord, end: Coord) -> int:
         """Get the next direction in the path from start to end."""
+        self._expand(start)
         self._expand(end)
 
         path = self.astar(start, end)
@@ -75,6 +76,17 @@ class SlamAstar:
         next_coord = path[1]
 
         return self._to_direction(curr_coord, next_coord)
+
+    def distance(self, start: Coord, end: Coord):
+        self._expand(start)
+        self._expand(end)
+
+        path = self.astar(start, end)
+        if path is None:
+            self._log(f"Could not find path from {start} to {end}")
+            return -1
+
+        return len(path)
 
     def _is_oob(self, point: Coord) -> bool:
         """Check if `point` is out-of-bounds. Note that `point` should be in map-space."""
