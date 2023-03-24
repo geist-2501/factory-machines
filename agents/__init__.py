@@ -1,11 +1,11 @@
-from agents.fm_nn_agent import FMNNAgent
-from agents.fm_simple_heuristic_agent import FMSimpleHeuristicAgent
-from talos import register_agent
 from agents.dqn_agent import DQNAgent, dqn_training_wrapper, dqn_graphing_wrapper
-from agents.fm_hdqn_agent import FactoryMachinesHDQNAgent
 from agents.ds_mpd_hdqn_agent import DiscreteStochasticHDQNAgent
+from agents.fm_hdqn_agent import FactoryMachinesHDQNAgent
+from agents.fm_simple_heuristic_agent import FMSimpleHeuristicAgent
 from agents.h_dqn_agent import hdqn_training_wrapper
-
+from agents.heuristics.aisled_nn_agent import AisledNNAgent
+from agents.heuristics.nn_agent import NNAgent
+from talos import register_agent
 
 register_agent(
     agent_id="DQN",
@@ -32,6 +32,11 @@ register_agent(
 )
 
 register_agent(
-    agent_id="FM-NN-Heuristic",
-    agent_factory=lambda obs, n_actions, device: FMNNAgent(obs, n_actions, device),
+    agent_id="FM-NN",
+    agent_factory=lambda obs, n_actions, device: NNAgent(obs, n_actions, device),
+)
+
+register_agent(
+    agent_id="FM-AisledNN",
+    agent_factory=lambda obs, n_actions, device: AisledNNAgent(obs, n_actions, device),
 )

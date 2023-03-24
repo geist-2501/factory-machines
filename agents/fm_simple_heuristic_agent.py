@@ -2,7 +2,7 @@ from typing import Dict, Tuple, Any
 
 import numpy as np
 
-from agents.slam_astar import SlamAstar
+from agents.heuristics.slam_astar import SlamAstar
 from talos import Agent
 
 

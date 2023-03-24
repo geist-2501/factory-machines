@@ -2,7 +2,7 @@ from typing import Dict, Tuple, Any, Optional
 
 import numpy as np
 
-from agents.slam_astar import SlamAstar
+from agents.heuristics.slam_astar import SlamAstar
 from talos import Agent
 
 Coord = np.ndarray
@@ -21,7 +21,7 @@ class AgentState:
         self.order[self.target_index] -= 1
 
 
-class FMNNAgent(Agent):
+class NNAgent(Agent):
 
     _up, _left, _right, _down, _grab = range(5)
 
@@ -95,16 +95,12 @@ class FMNNAgent(Agent):
     def _get_target_loc(self, agent_state):
         return self._all_locs[agent_state.target_index]
 
-    def _get_first_target_index(self, agent_loc: Coord, order: Order):
-        """Pick the closest of the start or end depots."""
-        first_idx = np.argmin(order > 0).item()
-        last_idx = np.argmax(order > 0).item()
-        first_dist = self._nav.distance(agent_loc, self._depot_locs[first_idx])
-        last_dist = self._nav.distance(agent_loc, self._depot_locs[last_idx])
+    def _get_first_target_index(self, agent_loc: Coord, order: Order) -> int:
+        """Pick the depot from the order to start with."""
+        return self._get_next_target_index(agent_loc, order)
 
-        return first_idx if first_dist < last_dist else last_idx
-
-    def _get_next_target_index(self, agent_loc: Coord, order: Order) -> Optional[int]:
+    def _get_next_target_index(self, agent_loc: Coord, order: Order) -> int:
+        """Get the next depot to visit in the order."""
         if sum(order) == 0:
             return self._output_idx
 

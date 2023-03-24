@@ -147,6 +147,10 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         self.screen = None
         self.clock = None
 
+        # Stats.
+        self._dist_travelled = 0
+        self._timestep = 0
+
     def _get_obs(self):
 
         local_obs = np.zeros((3, 3))
@@ -183,17 +187,24 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
         super().reset(seed=seed, options=options)
 
+        if seed is not None:
+            np.random.seed(seed)
+
         self._agent_loc = self._output_loc
 
         self._agent_inv = np.zeros(self._num_depots, dtype=int)
 
         obs = self._get_obs()
 
+        self._timestep = 0
+        self._dist_travelled = 0
+
         return obs, {}
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
 
         self._last_action = action
+        self._timestep += 1
 
         # Process actions.
         action_reward = 0
@@ -207,6 +218,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
                 self._history.log("Agent bumped into a wall.")
             else:
                 self._agent_loc = new_pos
+                self._dist_travelled += 1
         elif action == self.grab:
             # Action is a grab op.
             action_reward = self._try_grab()
@@ -219,7 +231,10 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         reward = action_reward + drop_off_reward - 0.1
 
         obs = self._get_obs()
-        info = {}
+        info = {
+            "timesteps": self._timestep,
+            "distance": self._dist_travelled,
+        }
 
         if self.render_mode == "human":
             self.render()

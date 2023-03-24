@@ -27,7 +27,6 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             map_id="0",
             num_orders=10,
             agent_capacity=10,
-            timestep_override: int = None,
             order_generator: OrderGenerator = None,
             verbose=False,
             correct_obs=False
@@ -45,9 +44,9 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
                 "agent_obs": spaces.Box(0, 1, shape=(9,), dtype=int),
                 "agent_inv": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
                 "depot_locs": spaces.Box(0, max(self._len_x, self._len_y), shape=(len(self._depot_locs) * 2,), dtype=int),
-                "depot_queues": spaces.Box(0, 10, shape=(len(self._depot_locs),), dtype=int),
+                "depot_queues": spaces.Box(0, num_orders, shape=(len(self._depot_locs),), dtype=int),
                 "output_loc": spaces.Box(0, max(self._len_x, self._len_y), shape=(2,), dtype=int),
-                "depot_ages": spaces.Box(0, 1000, shape=(len(self._depot_locs),), dtype=int),
+                "depot_ages": spaces.Box(0, self._age_bands, shape=(len(self._depot_locs),), dtype=int),
             }
         )
 
@@ -56,14 +55,12 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
         self._total_num_orders = num_orders
         self._num_orders_pending = num_orders
         self._open_orders: List[Tuple[int, np.ndarray]] = []
-        self._timestep = 0 if timestep_override is None else timestep_override
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[ObsType, dict]:
         obs, _ = super().reset(seed=seed, options=options)
 
         self._num_orders_pending = self._total_num_orders
         self._open_orders = []
-        self._timestep = 0
 
         return obs, {}
 
@@ -80,7 +77,10 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
         terminated = self._num_orders_pending == 0 and len(self._open_orders) == 0
         reward += 100 if terminated else 0
 
-        self._timestep += 1
+        info = {
+            **info,
+            "orders per minute": self._get_num_completed_orders() / self._timestep
+        }
 
         return obs, reward, terminated, False, info
 
@@ -180,3 +180,6 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
         compressed_age = self._get_age(age)
         reward = self._age_bands - compressed_age
         return reward
+
+    def _get_num_completed_orders(self):
+        return self._total_num_orders - (self._num_orders_pending + len(self._open_orders))

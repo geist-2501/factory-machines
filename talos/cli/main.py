@@ -131,7 +131,8 @@ def train(
                 agent_data=data,
                 training_artifacts=training_artifacts,
                 used_wrappers=opt_wrapper,
-                config=dict(agent_config)
+                config=dict(agent_config),
+                env_args=opt_env_args
             )
             talfile.write(path)
         except OSError as ex:

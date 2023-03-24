@@ -139,12 +139,23 @@ def compare(
         paths: List[str] = typer.Argument(
             None,
             help="Talfiles of agents to compare against each other."
+        ),
+        opt_env_args: List[str] = typer.Option(
+            [],
+            "--env-arg",
+        ),
+        opt_n_episodes: int = typer.Option(
+            3,
+            "--num-episodes",
+            "-n"
         )
 ):
     """
     Compare several agents against each other in an environment.
     Agents must have a common environment, but can have different wrappers.
     """
+
+    opt_env_args = _convert_to_key_value_list(opt_env_args)
 
     loaded_agents = []
     for agent_talfile in paths:
@@ -154,7 +165,8 @@ def compare(
             talfile = read_talfile(agent_talfile)
 
             # Recreate the env factory and wrapper.
-            agent_env_factory = create_env_factory(talfile.env_name, talfile.used_wrappers)
+            env_args = {**talfile.env_args, **opt_env_args}
+            agent_env_factory = create_env_factory(talfile.env_name, talfile.used_wrappers, env_args=env_args)
             agent, _ = create_agent(agent_env_factory, talfile.id)
             agent.load(talfile.agent_data)
             loaded_agents.append({
@@ -182,4 +194,9 @@ def compare(
         should_continue = typer.confirm("Only some agents loaded, ready to proceed?", default=False)
 
     if should_continue:
-        evaluate_agents(loaded_agents)
+        rewards, final_infos = evaluate_agents(loaded_agents, n_episodes=opt_n_episodes)
+        print("\nComparison results:")
+        for i, reward in enumerate(rewards):
+            agent_name = loaded_agents[i]["agent_name"]
+            print(f"Agent {agent_name}\tR:[{reward}], I:[{final_infos[i]}]")
+

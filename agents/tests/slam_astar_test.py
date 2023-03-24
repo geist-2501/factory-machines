@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from agents.slam_astar import SlamAstar
+from agents.heuristics.slam_astar import SlamAstar
 
 
 class SlamAstarTest(unittest.TestCase):
