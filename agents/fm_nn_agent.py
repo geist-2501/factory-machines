@@ -33,7 +33,8 @@ class FMNNAgent(Agent):
         raw_depot_locs = obs["depot_locs"]
         num_depots = len(raw_depot_locs) // 2
         self._depot_locs = np.array(raw_depot_locs).reshape(num_depots, 2)
-        self._output_loc = obs["output_loc"]
+        self._all_locs = np.append(self._depot_locs, [obs["output_loc"]], axis=0)
+        self._output_idx = num_depots
 
         self._nav = SlamAstar(local_obs)
 
@@ -48,32 +49,24 @@ class FMNNAgent(Agent):
         self._nav.update(agent_loc, agent_obs)
 
         if sum(depot_queues) == 0:
-            return self._idle(), None
+            return self._idle(), agent_state
 
         # If no current state, take snapshot.
         if agent_state is None:
-            order = np.copy(depot_queues)
-            agent_state = AgentState(
-                order=order,
-                target_index=self._get_next_target_index(agent_loc, order)
-            )
+            agent_state = self._make_state(agent_loc, depot_queues)
 
         target_loc = self._get_target_loc(agent_state)
-
-        if np.array_equal(target_loc, agent_loc):
-            if agent_state.target_index is None:
-                # On output depot, reset.
-                order = np.copy(depot_queues)
-                agent_state = AgentState(
-                    order=order,
-                    target_index=self._get_next_target_index(agent_loc, order)
-                )
+        if np.array_equal(agent_loc, target_loc):
+            # On depot.
+            if agent_state.target_index == self._output_idx:
+                # On output depot.
+                agent_state = self._make_state(agent_loc, depot_queues)
             elif agent_state.num_required_from_target() > 0:
-                # If items are still needed from the current depot, grab them!
+                # Grab resource from target.
                 agent_state.decrement_target()
                 return self._grab, agent_state
             else:
-                # If on target and no more items are needed, move to next target.
+                # Find new target.
                 agent_state.target_index = self._get_next_target_index(agent_loc, agent_state.order)
 
         target_loc = self._get_target_loc(agent_state)
@@ -85,6 +78,14 @@ class FMNNAgent(Agent):
 
         return direction, agent_state
 
+    def _make_state(self, agent_loc, depot_queues):
+        order = np.copy(depot_queues)
+        agent_state = AgentState(
+            order=order,
+            target_index=self._get_first_target_index(agent_loc, order)
+        )
+        return agent_state
+
     def save(self) -> Dict:
         return {}
 
@@ -92,12 +93,20 @@ class FMNNAgent(Agent):
         pass
 
     def _get_target_loc(self, agent_state):
-        return self._depot_locs[agent_state.target_index] \
-            if agent_state.target_index is not None else self._output_loc
+        return self._all_locs[agent_state.target_index]
+
+    def _get_first_target_index(self, agent_loc: Coord, order: Order):
+        """Pick the closest of the start or end depots."""
+        first_idx = np.argmin(order > 0).item()
+        last_idx = np.argmax(order > 0).item()
+        first_dist = self._nav.distance(agent_loc, self._depot_locs[first_idx])
+        last_dist = self._nav.distance(agent_loc, self._depot_locs[last_idx])
+
+        return first_idx if first_dist < last_dist else last_idx
 
     def _get_next_target_index(self, agent_loc: Coord, order: Order) -> Optional[int]:
         if sum(order) == 0:
-            return None
+            return self._output_idx
 
         distances = [self._nav.distance(agent_loc, self._depot_locs[idx]) if quant > 0 else np.inf
                      for idx, quant in enumerate(order)]
