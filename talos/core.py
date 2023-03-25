@@ -31,7 +31,11 @@ def play_agent(
         info_history.append(info)
 
         if env.render_mode != "human":
-            env.render()
+            if env.render_mode == "rgb_array":
+                plt.imshow(env.render())
+                plt.pause(0.01)
+            else:
+                env.render()
 
         if wait_time:
             time.sleep(wait_time)
