@@ -26,7 +26,26 @@ class TimeKeeper:
         super().__init__()
         self.steps = 0
         self.meta_steps = 0
+        self.k = None
+        self._k_end = 0
 
+    def set_k_catch_up(self, k: int):
+        self.k = k
+        self._k_end = self.steps + self.k
+
+    def should_train_q1(self) -> bool:
+        if self.k is None:
+            return True
+        else:
+            return not self.steps > self._k_end
+
+    def step(self):
+        self.steps += 1
+        if self.meta_steps > self._k_end:
+            self._k_end = self.steps
+
+    def meta_step(self):
+        self.meta_steps += 1
 
 class HDQNAgent(Agent, ABC):
     """
@@ -217,6 +236,7 @@ class HDQNTrainingWrapper:
         self.agent = agent
         self.artifacts = artifacts
 
+        self.total_steps = config.getint("total_steps")
         self.pretrain_episodes = config.getint("pretrain_episodes")
         self.train_episodes = config.getint("train_episodes")
         self.episode_max_timesteps = config.getint("episode_max_timesteps")
@@ -297,18 +317,24 @@ class HDQNTrainingWrapper:
                 progress_bar.refresh()
 
         # Train Q1 & Q2.
-        for step in trange(self.train_episodes, desc="Episodes"):
-            self.play_episode(env, timekeeper=timekeeper, learn=True)
+        timekeeper.set_k_catch_up(self.k_catch_up)
+        with trange(self.total_steps, desc="Steps") as progress_bar:
+            while timekeeper.steps < self.total_steps:
 
-            self.epsilon_history = np.append(
-                self.epsilon_history,
-                [[self.agent.eps2, *self.agent.eps1]],
-                axis=0
-            )
+                self.play_episode(env, timekeeper=timekeeper, learn=True)
 
-            if step % self.eval_freq == 0:
-                # Perform an evaluation.
-                self.evaluate_and_graph(seed=step, timekeeper=timekeeper)
+                self.epsilon_history = np.append(
+                    self.epsilon_history,
+                    [[self.agent.eps2, *self.agent.eps1]],
+                    axis=0
+                )
+
+                if timekeeper.steps % self.eval_freq == 0:
+                    # Perform an evaluation.
+                    self.evaluate_and_graph(seed=timekeeper.steps, timekeeper=timekeeper)
+
+                progress_bar.update(timekeeper.steps - progress_bar.n)
+                progress_bar.refresh()
 
     def play_episode(
             self,
@@ -353,24 +379,29 @@ class HDQNTrainingWrapper:
             )
 
             if learn and timekeeper:
-                timekeeper.steps += 1
+                timekeeper.step()
 
                 # Update Q1 on every step.
-                q1_loss, q1_grad_norm = self.agent.update_net(
-                    net=self.agent.q1_net,
-                    net_fixed=self.agent.q1_net_fixed,
-                    buffer=self.agent.d1,
-                    opt=self.opt1,
-                    batch_size=self.batch_size,
-                    max_grad_norm=self.max_grad_norm
-                )
+                if timekeeper.should_train_q1():
+                    q1_loss, q1_grad_norm = self.agent.update_net(
+                        net=self.agent.q1_net,
+                        net_fixed=self.agent.q1_net_fixed,
+                        buffer=self.agent.d1,
+                        opt=self.opt1,
+                        batch_size=self.batch_size,
+                        max_grad_norm=self.max_grad_norm
+                    )
 
-                if timekeeper.steps % self.net_update_freq == 0:
-                    self.agent.update_q1_fixed()
+                    if timekeeper.steps % self.net_update_freq == 0:
+                        self.agent.update_q1_fixed()
 
-                if timekeeper.steps % self.gather_freq == 0:
-                    self.q1_loss_history.append(q1_loss.data.cpu().numpy())
-                    self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
+                    if timekeeper.steps % self.gather_freq == 0:
+                        self.q1_loss_history.append(q1_loss.data.cpu().numpy())
+                        self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
+                else:
+                    if timekeeper.steps % self.gather_freq == 0:
+                        self.q1_loss_history.append(np.nan)
+                        self.q1_grad_norm_history.append(np.nan)
 
                 if not q1_only:
                     q2_loss, q2_grad_norm = self.agent.update_net(
@@ -407,7 +438,7 @@ class HDQNTrainingWrapper:
                 goal = None
 
                 if learn and timekeeper and not q1_only:
-                    timekeeper.meta_steps += 1
+                    timekeeper.meta_step()
 
             obs = next_obs
 
@@ -486,11 +517,11 @@ class HDQNTrainingWrapper:
         # self.artifacts["mean_reward"] = self.mean_reward_history
         # self.artifacts["epsilon"] = self.epsilon_history
 
-        q1_loss = np.mean(self.q1_loss_history[-10:]).item()
-        q2_loss = np.mean(self.q2_loss_history[-10:]).item()
+        q1_loss = np.nanmean(self.q1_loss_history[-10:]).item()
+        q2_loss = np.nanmean(self.q2_loss_history[-10:]).item()
         tqdm.write(f"T[Q1: {timekeeper.steps}, Q2: {timekeeper.meta_steps}], "
                    f"R[Q1: {intrinsic_score:.2f}, Q2: {extrinsic_score:.2f}], "
-                   f"L[Q1: {q1_loss:.2f}, Q2: {q2_loss:.2f}]")
+                   f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], K[{not timekeeper.should_train_q1()}]")
 
 
 def hdqn_training_wrapper(
