@@ -1,20 +1,20 @@
 import configparser
-from typing import Dict, Callable, Tuple, Any, TypeVar, List, Optional
-from operator import itemgetter
 from abc import ABC, abstractmethod
+from operator import itemgetter
+from typing import Dict, Callable, Tuple, Any, TypeVar, List
 
 import gym
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from tqdm import trange, tqdm
 
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer
 from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list
-from talos import Agent
+from talos import Agent, ExtraState
 
 DictObsType = TypeVar("DictObsType")
 FlatObsType = TypeVar("FlatObsType")
@@ -104,6 +104,7 @@ class HDQNAgent(Agent, ABC):
 
     def get_action(self, obs: DictObsType, extra_state=None, only_q1=False) -> Tuple[ActType, Any]:
         """Get the optimal action given a state."""
+
         goal = extra_state  # Treat the extra state we're given as the goal.
         if goal is None:
             if only_q1:
@@ -118,6 +119,12 @@ class HDQNAgent(Agent, ABC):
         action = self.get_epsilon(controller_obs, epsilon=0, net=self.q1_net)
 
         return action, goal
+
+    def post_step(self, obs, action, next_obs, extra_state: ExtraState = None) -> ExtraState:
+        goal = extra_state
+        if self.goal_satisfied(obs, action, next_obs, goal):
+            goal = None
+        return goal
 
     def get_epsilon_action(self, obs: DictObsType, goal: ActType) -> ActType:
         """Get an action from the controller, using the epsilon greedy policy."""
@@ -236,12 +243,15 @@ class HDQNTrainingWrapper:
         decay_start = config.getfloat("init_epsilon")
         decay_end = config.getfloat("final_epsilon")
         decay_steps = config.getfloat("decay_over_eps")
-        self.epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps)
+        q1_decay_scaling_factor = config.getfloat("q1_decay_scaling_factor")
+        self.epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps * q1_decay_scaling_factor)
                                for _ in range(agent.n_goals)]
         self.epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
 
         self.net_update_freq = config.getint("refresh_target_network_freq")
         self.gather_freq = 50
+
+        self.k_catch_up = config.getint("k_catch_up", fallback=None)
 
         self.axs = self.init_graphing()
         self.q1_loss_history = []
@@ -300,7 +310,14 @@ class HDQNTrainingWrapper:
                 # Perform an evaluation.
                 self.evaluate_and_graph(seed=step, timekeeper=timekeeper)
 
-    def play_episode(self, env: gym.Env, timekeeper: TimeKeeper = None, learn=True, q1_only=False, show_progress=True):
+    def play_episode(
+            self,
+            env: gym.Env,
+            timekeeper: TimeKeeper = None,
+            learn=True,
+            q1_only=False,
+            show_progress=True
+    ):
         obs, _ = env.reset()
         meta_r = 0
         meta_obs = None
@@ -355,12 +372,29 @@ class HDQNTrainingWrapper:
                     self.q1_loss_history.append(q1_loss.data.cpu().numpy())
                     self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
 
-            if self.agent.goal_satisfied(obs, action, next_obs, goal):
+                if not q1_only:
+                    q2_loss, q2_grad_norm = self.agent.update_net(
+                        net=self.agent.q2_net,
+                        net_fixed=self.agent.q2_net_fixed,
+                        buffer=self.agent.d2,
+                        opt=self.opt2,
+                        batch_size=self.batch_size,
+                        max_grad_norm=self.max_grad_norm
+                    )
+
+                    if timekeeper.steps % self.net_update_freq == 0:
+                        self.agent.update_q2_fixed()
+
+                    if timekeeper.steps % self.gather_freq == 0:
+                        self.q2_loss_history.append(q2_loss.data.cpu().numpy())
+                        self.q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
+
+            if self.agent.goal_satisfied(obs, action, next_obs, goal) or done:
                 # End of the meta-action.
                 self.agent.d2.add(
                     self.agent.to_q2(meta_obs),
                     goal,
-                    ext_r,
+                    meta_r,
                     self.agent.to_q2(next_obs),
                     done
                 )
@@ -374,22 +408,6 @@ class HDQNTrainingWrapper:
 
                 if learn and timekeeper and not q1_only:
                     timekeeper.meta_steps += 1
-
-                    q2_loss, q2_grad_norm = self.agent.update_net(
-                        net=self.agent.q2_net,
-                        net_fixed=self.agent.q2_net_fixed,
-                        buffer=self.agent.d2,
-                        opt=self.opt2,
-                        batch_size=self.batch_size,
-                        max_grad_norm=self.max_grad_norm
-                    )
-
-                    if timekeeper.meta_steps % self.net_update_freq == 0:
-                        self.agent.update_q2_fixed()
-
-                    if timekeeper.meta_steps % self.gather_freq == 0:
-                        self.q2_loss_history.append(q2_loss.data.cpu().numpy())
-                        self.q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
 
             obs = next_obs
 
@@ -416,6 +434,7 @@ class HDQNTrainingWrapper:
                 next_s, r, done, _, _ = env.step(a)
                 total_extrinsic_reward += r
                 total_intrinsic_reward += agent.get_intrinsic_reward(s, a, next_s, goal)
+                goal = agent.post_step(s, a, next_s, goal)
                 s = next_s
 
                 if done:
@@ -429,12 +448,14 @@ class HDQNTrainingWrapper:
     def init_graphing():
         if can_graph():
             fig = plt.figure(layout="constrained")
-            gs = GridSpec(2, 3, figure=fig)
+            gs = GridSpec(3, 3, figure=fig)
             ax_reward = fig.add_subplot(gs[0, :-1])
             ax_epsilon = fig.add_subplot(gs[0, -1:])
-            ax_loss = fig.add_subplot(gs[1, :-1])
-            ax_grad_norm = fig.add_subplot(gs[1, -1:])
-            axs = (ax_reward, ax_epsilon, ax_loss, ax_grad_norm)
+            ax_q1_loss = fig.add_subplot(gs[1, :-1])
+            ax_q1_grad_norm = fig.add_subplot(gs[1, -1:])
+            ax_q2_loss = fig.add_subplot(gs[2, :-1])
+            ax_q2_grad_norm = fig.add_subplot(gs[2, -1:])
+            axs = (ax_reward, ax_epsilon, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm)
         else:
             fig, axs = None, None
 
@@ -490,30 +511,34 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     if can_graph() is False:
         return
 
-    ax_reward, ax_epsilon, ax_loss, ax_grad_norm = axs
+    ax_reward, ax_epsilon, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm  = axs
 
     ax_reward.cla()
     ax_epsilon.cla()
-    ax_loss.cla()
-    ax_grad_norm.cla()
+    ax_q1_loss.cla()
+    ax_q1_grad_norm.cla()
+    ax_q2_loss.cla()
+    ax_q2_grad_norm.cla()
 
     ax_reward.set_title("Mean Reward")
     ax_epsilon.set_title("Epsilon")
-    ax_loss.set_title("Loss")
-    ax_grad_norm.set_title("Grad Norm")
+    ax_q1_loss.set_title("Loss Q1")
+    ax_q1_grad_norm.set_title("Grad Norm Q1")
+    ax_q2_loss.set_title("Loss Q2")
+    ax_q2_grad_norm.set_title("Grad Norm Q2")
 
     ax_reward.plot(mean_reward_history[0])
     ax_reward.plot(mean_reward_history[1])
 
-    ax_loss.plot(smoothen(loss_history[0]))
-    ax_loss.plot(smoothen(loss_history[1]))
+    ax_q1_loss.plot(smoothen(loss_history[0]))
+    ax_q2_loss.plot(smoothen(loss_history[1]))
 
     for i in range(epsilon_history.shape[1]):
         label = "Q2" if i == 0 else f"Q1-{i - 1}"
         ax_epsilon.plot(epsilon_history[:, i], label=label)
     ax_epsilon.legend()
 
-    ax_grad_norm.plot(smoothen(grad_norm_history[0]))
-    ax_grad_norm.plot(smoothen(grad_norm_history[1]))
+    ax_q1_grad_norm.plot(smoothen(grad_norm_history[0]))
+    ax_q2_grad_norm.plot(smoothen(grad_norm_history[1]))
 
     plt.pause(0.05)

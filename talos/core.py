@@ -19,14 +19,20 @@ def play_agent(
         max_episode_steps=1000,
         wait_time: float = None
 ):
-    s, _ = env.reset()
+    obs, _ = env.reset()
     env.render()
-    extra = None
+    extra_state = None
     reward_history = []
     info_history = []
     for _ in range(max_episode_steps):
-        action, extra = agent.get_action(s, extra)
-        s, r, done, _, info = env.step(action)
+        action, extra_state = agent.get_action(obs, extra_state)
+        next_obs, r, done, _, info = env.step(action)
+
+        # Some agents require extra processing (looking at you, h-DQN).
+        extra_state = agent.post_step(obs, action, next_obs, extra_state)
+
+        obs = next_obs
+
         reward_history.append(r)
         info_history.append(info)
 
@@ -124,13 +130,18 @@ def evaluate_agent(
     total_ep_rewards = []
     total_infos = defaultdict(lambda : [])
     for ep_num in range(n_episodes):
-        s, _ = env.reset()
+        obs, _ = env.reset()
         total_ep_reward = 0
         extra_state = None
         for _ in range(max_episode_steps):
-            a, extra_state = agent.get_action(s, extra_state)
-            s, r, done, _, info = env.step(a)
-            total_ep_reward += r
+            action, extra_state = agent.get_action(obs, extra_state)
+            next_obs, reward, done, _, info = env.step(action)
+            total_ep_reward += reward
+
+            # Some agents require extra processing (looking at you, h-DQN).
+            extra_state = agent.post_step(obs, action, next_obs, extra_state)
+
+            obs = next_obs
 
             if done:
                 for k, v in info.items():

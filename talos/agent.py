@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple
 
+ExtraState = Any
+
 
 class Agent(ABC):
     """Base class for an agent for use in the Talos ecosystem."""
@@ -10,9 +12,12 @@ class Agent(ABC):
         self.name = name
 
     @abstractmethod
-    def get_action(self, obs, extra_state=None) -> Tuple[int, Any]:
+    def get_action(self, obs, extra_state: ExtraState = None) -> Tuple[int, ExtraState]:
         """Request an action."""
         pass
+
+    def post_step(self, obs, action, next_obs, extra_state: ExtraState = None) -> ExtraState:
+        return extra_state
 
     @abstractmethod
     def save(self) -> Dict:

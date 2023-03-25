@@ -7,4 +7,4 @@ except ModuleNotFoundError:
 
 from talos.registration import register_agent, register_wrapper
 from talos.cli.main import talos_app
-from talos.core import Agent
+from talos.agent import Agent, ExtraState
