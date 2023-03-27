@@ -41,6 +41,8 @@ class MeteredLinearDecay:
         self._tick += 1
         return v
 
+    def get_epsilon(self):
+        return self._decay.get(self._tick)
 
 class SuccessRateDecay:
     def __init__(self, start_value, final_value, min_steps):
@@ -67,6 +69,10 @@ class SuccessRateDecay:
         minimum_decay = self._decay.next()
         return max(inv_success_rate, minimum_decay)
 
+    def get_epsilon(self):
+        inv_success_rate = (1 - self.get_success_rate()) * self.start_value
+        minimum_decay = self._decay.get_epsilon()
+        return max(inv_success_rate, minimum_decay)
 
 def smoothen(data):
     return uniform_filter1d(data, size=30)

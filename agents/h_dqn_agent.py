@@ -303,8 +303,7 @@ class HDQNTrainingWrapper:
                     q1_progress_bar.refresh()
 
     def _q1_is_successful(self):
-        return all([goal.get_success_rate() > self.q1_pretrain_thresh and goal.n_successful_attempts > 100
-                    for goal in self.epsilon1_decay])
+        return all([goal.get_epsilon() < 1 - self.q1_pretrain_thresh for goal in self.epsilon1_decay])
 
     def play_episode(
             self,
