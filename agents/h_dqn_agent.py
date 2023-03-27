@@ -14,7 +14,7 @@ from tqdm import trange, tqdm
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer
 from agents.timekeeper import TimeKeeper
-from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list
+from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list, SuccessRateDecay
 from talos import Agent, ExtraState
 
 DictObsType = TypeVar("DictObsType")
@@ -211,6 +211,7 @@ class HDQNTrainingWrapper:
         self.agent = agent
         self.artifacts = artifacts
 
+        self.q1_pretrain_thresh = config.getfloat("q1_pretrain_thresh")
         self.pretrain_steps = config.getint("pretrain_steps")
         self.train_steps = config.getint("train_steps")
         self.episode_max_timesteps = config.getint("episode_max_timesteps")
@@ -237,9 +238,9 @@ class HDQNTrainingWrapper:
         decay_start = config.getfloat("init_epsilon")
         decay_end = config.getfloat("final_epsilon")
         decay_steps = config.getfloat("decay_over_eps")
-        q1_decay_scaling_factor = config.getfloat("q1_decay_scaling_factor")
-        self.epsilon1_decay = [MeteredLinearDecay(decay_start, decay_end, decay_steps * q1_decay_scaling_factor)
-                               for _ in range(agent.n_goals)]
+        q1_decay_steps = config.getint("q1_decay_steps")
+
+        self.epsilon1_decay = [SuccessRateDecay(decay_start, decay_end, q1_decay_steps) for _ in range(agent.n_goals)]
         self.epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
 
         self.net_update_freq = config.getint("refresh_target_network_freq")
@@ -270,10 +271,12 @@ class HDQNTrainingWrapper:
 
         # Pretrain Q1.
         timekeeper.pretrain_mode()
-        with trange(self.pretrain_steps, desc="Q1 Pretrain") as progress_bar:
-            while timekeeper.get_steps() < self.pretrain_steps:
+        with tqdm(total=self.pretrain_steps, desc="Q1 Pretrain") as progress_bar:
+            while not self._q1_is_successful():
                 self.play_episode(env, timekeeper=timekeeper, learn=True, q1_only=True)
 
+                if timekeeper.get_steps() > progress_bar.total:
+                    progress_bar.total += self.pretrain_steps
                 progress_bar.update(timekeeper.get_steps() - progress_bar.n)
                 progress_bar.refresh()
 
@@ -298,6 +301,10 @@ class HDQNTrainingWrapper:
                     q2_progress_bar.refresh()
                     q1_progress_bar.update(timekeeper.get_steps() - q1_progress_bar.n)
                     q1_progress_bar.refresh()
+
+    def _q1_is_successful(self):
+        return all([goal.get_success_rate() > self.q1_pretrain_thresh and goal.n_successful_attempts > 100
+                    for goal in self.epsilon1_decay])
 
     def play_episode(
             self,
@@ -373,7 +380,8 @@ class HDQNTrainingWrapper:
                     if timekeeper.get_steps() % self.net_update_freq == 0:
                         self.agent.update_q2_fixed()
 
-            if self.agent.goal_satisfied(obs, action, next_obs, goal) or done:
+            goal_satisfied = self.agent.goal_satisfied(obs, action, next_obs, goal)
+            if goal_satisfied or done:
                 # End of the meta-action.
                 self.agent.d2.add(
                     self.agent.to_q2(meta_obs),
@@ -386,7 +394,7 @@ class HDQNTrainingWrapper:
                 if learn and timekeeper.should_train_q1():
                     # Update the epsilon for the completed goal.
                     if self.epsilon1_decay:
-                        self.agent.eps1[goal] = self.epsilon1_decay[goal].next()
+                        self.agent.eps1[goal] = self.epsilon1_decay[goal].next(goal_satisfied)
 
                 goal = None
 
@@ -404,7 +412,10 @@ class HDQNTrainingWrapper:
                 )
 
             if done:
-                break
+                return
+
+        if self.epsilon1_decay:
+            self.agent.eps1[goal] = self.epsilon1_decay[goal].next(False)
 
     def record_statistics(
             self,
@@ -507,11 +518,13 @@ class HDQNTrainingWrapper:
         self.artifacts["mean_reward"] = (self.q1_mean_reward_history, self.q2_mean_reward_history)
         self.artifacts["epsilon"] = self.epsilon_history
 
+        q1_mean_success_rate = np.mean([eps1.get_success_rate() for eps1 in self.epsilon1_decay])
+
         q1_loss = np.nanmean(self.q1_loss_history[-10:]).item()
         q2_loss = np.nanmean(self.q2_loss_history[-10:]).item()
         tqdm.write(f"T[Q1: {timekeeper.get_steps()}, Q2: {timekeeper.get_meta_steps()}], "
                    f"R[Q1: {intrinsic_score:.2f}, Q2: {extrinsic_score:.2f}], "
-                   f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], K[{timekeeper._k_end}]")
+                   f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], K[{timekeeper._k_end}], SR[{q1_mean_success_rate:.2f}]")
 
 
 def hdqn_training_wrapper(

@@ -87,7 +87,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     _item_dropoff_reward = 1
     _collision_punishment = -0.1
 
-    up, left, right, down, grab = range(5)
+    up, left, down, right, grab = range(5)
 
     def __init__(
             self,
@@ -95,7 +95,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             map_id="0",
             agent_capacity=10,
             verbose=False,
-            correct_obs=False
+            correct_obs=True
     ) -> None:
 
         agent_capacity = int(agent_capacity)

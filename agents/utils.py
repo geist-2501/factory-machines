@@ -42,6 +42,32 @@ class MeteredLinearDecay:
         return v
 
 
+class SuccessRateDecay:
+    def __init__(self, start_value, final_value, min_steps):
+        self._decay = MeteredLinearDecay(start_value, final_value, min_steps)
+        self.start_value = start_value
+        self.final_value = final_value
+        self.n_failed_attempts = 0
+        self.n_successful_attempts = 0
+
+    def get_success_rate(self) -> float:
+        n_total_attempts = self.n_successful_attempts + self.n_failed_attempts
+        if n_total_attempts == 0:
+            return 0
+
+        return self.n_successful_attempts / n_total_attempts
+
+    def next(self, was_successful: bool) -> float:
+        if was_successful:
+            self.n_successful_attempts += 1
+        else:
+            self.n_failed_attempts += 1
+
+        inv_success_rate = (1 - self.get_success_rate()) * self.start_value
+        minimum_decay = self._decay.next()
+        return max(inv_success_rate, minimum_decay)
+
+
 def smoothen(data):
     return uniform_filter1d(data, size=30)
 
