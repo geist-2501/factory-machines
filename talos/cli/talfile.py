@@ -178,8 +178,8 @@ def compare(
             extra_info = f"Uses {talfile.env_name}" \
                          + f" with wrapper {talfile.used_wrappers}." if talfile.used_wrappers else "."
             print(f"[bold green]success![/] {extra_info}")
-        except TalfileLoadError:
-            print("[bold red]failed![/] Couldn't load .tal file.")
+        except RuntimeError as ex:
+            print("[bold red]failed![/] Couldn't load .tal file. " + str(ex))
         except AgentNotFound:
             print("[bold red]failed![/] Couldn't find agent definition. Make sure it's been registered.")
 

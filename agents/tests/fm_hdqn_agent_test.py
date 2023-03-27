@@ -39,7 +39,33 @@ class FMHDQNAgentTest(unittest.TestCase):
         obs, _, _, _, _ = env.step(env.right)
 
         self.assertEqual(agent.get_intrinsic_reward(obs, env.up, obs, 0), -1)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.down, obs, 0), -0.01)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.left, obs, 0), -0.01)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.right, obs, 0), -0.01)
 
+        obs, _, _, _, _ = env.step(env.right)
+
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.up, obs, 0), -1)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.down, obs, 0), -0.01)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.left, obs, 0), -0.01)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.right, obs, 0), -1)
+
+        obs, _, _, _, _ = env.step(env.down)
+        obs, _, _, _, _ = env.step(env.down)
+
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.up, obs, 0), -0.01)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.down, obs, 0), -1)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.left, obs, 0), -0.01)
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.right, obs, 0), -1)
+
+    def test_should_punish_on_incorrect_grab(self):
+        env = FactoryMachinesRelativeWrapper(FactoryMachinesEnvMulti())
+        obs, _ = env.reset()
+        agent = FactoryMachinesHDQNAgent(obs, env.action_space.n)
+
+        next_obs, _, _, _, _ = env.step(env.grab)
+
+        self.assertEqual(agent.get_intrinsic_reward(obs, env.grab, next_obs, 1), -1)
 
 
 if __name__ == '__main__':

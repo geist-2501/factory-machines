@@ -12,7 +12,7 @@ from factory_machines_env.envs.warehouse import Map
 
 
 def _opt_bool(opt: Union[str, bool]) -> bool:
-    if type(opt) is bool:
+    if type(opt) is str:
         return opt == "True"
     else:
         return opt

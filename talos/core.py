@@ -7,6 +7,7 @@ import gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from rich import print
 
 from talos.agent import Agent
 from talos.error import *
@@ -128,11 +129,12 @@ def evaluate_agent(
         verbose=False
 ) -> Tuple[float, Dict[str, float]]:
     total_ep_rewards = []
-    total_infos = defaultdict(lambda : [])
+    total_infos = defaultdict(lambda: [])
     for ep_num in range(n_episodes):
         obs, _ = env.reset()
         total_ep_reward = 0
         extra_state = None
+        done = False
         for _ in range(max_episode_steps):
             action, extra_state = agent.get_action(obs, extra_state)
             next_obs, reward, done, _, info = env.step(action)
@@ -150,6 +152,9 @@ def evaluate_agent(
                 if verbose:
                     print(f"Episode {ep_num} | R:{total_ep_reward}, I:{info}")
                 break
+
+        if not done and verbose:
+            print("[red]Agent did not complete.[/]")
 
         total_ep_rewards.append(total_ep_reward)
 

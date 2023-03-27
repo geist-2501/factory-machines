@@ -108,6 +108,7 @@ def flatten(obs: Dict) -> List:
         *obs["agent_inv"],
         *obs["depot_locs"].flatten(),
         *obs["depot_queues"],
+        *obs["depot_ages"],
         *obs["output_loc"],
     ]
 

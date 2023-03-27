@@ -14,7 +14,7 @@ from tqdm import trange, tqdm
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer
 from agents.timekeeper import TimeKeeper
-from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list, SuccessRateDecay
+from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list, SuccessRateDecay, StaticLinearDecay
 from talos import Agent, ExtraState
 
 DictObsType = TypeVar("DictObsType")
@@ -237,17 +237,18 @@ class HDQNTrainingWrapper:
 
         decay_start = config.getfloat("init_epsilon")
         decay_end = config.getfloat("final_epsilon")
-        decay_steps = config.getfloat("decay_over_eps")
+        q2_decay_steps = config.getfloat("q2_decay_steps")
         q1_decay_steps = config.getint("q1_decay_steps")
 
         self.epsilon1_decay = [SuccessRateDecay(decay_start, decay_end, q1_decay_steps) for _ in range(agent.n_goals)]
-        self.epsilon2_decay = MeteredLinearDecay(decay_start, decay_end, decay_steps)
+        self.epsilon2_decay = StaticLinearDecay(decay_start, decay_end, q2_decay_steps)
 
         self.net_update_freq = config.getint("refresh_target_network_freq")
         self.gather_freq = 50
 
         self.k_catch_up = config.getint("k_catch_up", fallback=None)
 
+        # Statistics.
         self.axs = self.init_graphing()
         self.q1_loss_history = []
         self.q2_loss_history = []
@@ -255,6 +256,7 @@ class HDQNTrainingWrapper:
         self.q2_grad_norm_history = []
         self.q1_mean_reward_history = []
         self.q2_mean_reward_history = []
+        self.q2_action_length_history = []
         self.epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
 
     def train(self):
@@ -315,20 +317,24 @@ class HDQNTrainingWrapper:
     ):
         obs, _ = env.reset()
         meta_r = 0
+        meta_t = 0
         meta_obs = None
         goal = None
 
-        if learn and not q1_only:
-            if self.epsilon2_decay:
-                self.agent.eps2 = self.epsilon2_decay.next()
+        if learn and not q1_only and self.epsilon2_decay and timekeeper:
+            self.agent.eps2 = self.epsilon2_decay.get(timekeeper.get_meta_steps())
 
         for _ in trange(self.episode_max_timesteps, leave=False, disable=not show_progress):
 
             q1_loss, q1_grad_norm, q2_loss, q2_grad_norm = None, None, None, None
 
+            meta_t += 1
+
             if goal is None:
                 meta_obs = obs
                 meta_r = 0
+                meta_t = 0
+
                 if q1_only:
                     goal = np.random.choice(self.agent.n_goals)
                 else:
@@ -389,6 +395,8 @@ class HDQNTrainingWrapper:
                     self.agent.to_q2(next_obs),
                     done
                 )
+
+                self.q2_action_length_history.append(meta_t)
 
                 if learn and timekeeper.should_train_q1():
                     # Update the epsilon for the completed goal.
@@ -524,7 +532,8 @@ class HDQNTrainingWrapper:
         q2_loss = np.nanmean(self.q2_loss_history[-10:]).item()
         tqdm.write(f"T[Q1: {timekeeper.get_steps()}, Q2: {timekeeper.get_meta_steps()}], "
                    f"R[Q1: {intrinsic_score:.2f}, Q2: {extrinsic_score:.2f}], "
-                   f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], K[{timekeeper._k_end}], SR[{q1_mean_success_rate:.2f}]")
+                   f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], K[{timekeeper._k_end}], "
+                   f"SR[{q1_mean_success_rate:.2f}], Q2-Len[{np.mean(self.q2_action_length_history[-10:])}]")
 
 
 def hdqn_training_wrapper(

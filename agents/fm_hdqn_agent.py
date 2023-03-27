@@ -43,7 +43,7 @@ class FactoryMachinesHDQNAgent(HDQNAgent):
         return flatten(obs)  # TODO try with narrower state.
 
     def _did_collide(self, local_obs, action) -> bool:
-        return (action == self.up and local_obs[-1, 0] == 1) \
-            or (action == self.down and local_obs[1, 0] == 1) \
-            or (action == self.right and local_obs[0, 1] == 1) \
-            or (action == self.left and local_obs[0, -1] == 1)
+        return (action == self.up and local_obs[0, 1] == 1) \
+            or (action == self.down and local_obs[2, 1] == 1) \
+            or (action == self.right and local_obs[1, 2] == 1) \
+            or (action == self.left and local_obs[1, 0] == 1)

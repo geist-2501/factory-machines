@@ -29,7 +29,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             agent_capacity=10,
             order_generator: OrderGenerator = None,
             verbose=False,
-            correct_obs=False
+            correct_obs=True
     ) -> None:
         super().__init__(render_mode, map_id, agent_capacity, verbose, correct_obs)
 
