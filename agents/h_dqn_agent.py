@@ -290,9 +290,9 @@ class HDQNTrainingWrapper:
         timekeeper.set_k_catch_up(self.k_catch_up)
         with trange(self.train_steps, desc="Q2 Steps") as q2_progress_bar:
             with trange(self.train_steps, desc="Q1 Steps") as q1_progress_bar:
-                while timekeeper.get_meta_steps() < self.train_steps:
+                while timekeeper.get_meta_steps() < self.train_steps or timekeeper.get_steps() < self.train_steps:
 
-                    self.play_episode(env, timekeeper=timekeeper, learn=True, show_progress=False)
+                    self.play_episode(env, timekeeper=timekeeper, learn=True, show_progress=True)
 
                     q2_progress_bar.update(timekeeper.get_meta_steps() - q2_progress_bar.n)
                     q2_progress_bar.refresh()

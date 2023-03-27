@@ -1,3 +1,6 @@
+from typing import Optional
+
+
 class TimeKeeper:
     def __init__(self) -> None:
         super().__init__()
@@ -9,7 +12,9 @@ class TimeKeeper:
         self.k = None
         self._k_end = 0
 
-    def set_k_catch_up(self, k: int):
+    def set_k_catch_up(self, k: Optional[int]):
+        if k is None:
+            return
         self.k = k
         self._k_end = self._steps + self.k
 
@@ -33,7 +38,7 @@ class TimeKeeper:
 
     def meta_step(self):
         self._meta_steps += 1
-        if self._meta_steps >= self._k_end:
+        if self.k is not None and self._meta_steps >= self._k_end:
             self._k_end = self._meta_steps + self.k
 
     def get_meta_steps(self):
