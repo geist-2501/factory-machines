@@ -414,7 +414,8 @@ class HDQNTrainingWrapper:
             if done:
                 return
 
-        if self.epsilon1_decay:
+        if self.epsilon1_decay and goal:
+            # Goal failed.
             self.agent.eps1[goal] = self.epsilon1_decay[goal].next(False)
 
     def record_statistics(
