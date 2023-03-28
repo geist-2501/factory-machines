@@ -251,6 +251,9 @@ class HDQNTrainingWrapper:
 
         self.k_catch_up = config.getint("k_catch_up")
 
+        replay_buffer_size = config.getint("replay_buffer_size")
+        self.agent.set_replay_buffer_size(replay_buffer_size)
+
         # Statistics.
         self.axs = _init_graphing()
         self.q1_loss_history = []
