@@ -249,7 +249,7 @@ class HDQNTrainingWrapper:
         self.net_update_freq = config.getint("refresh_target_network_freq")
         self.gather_freq = 50
 
-        self.k_catch_up = config.getint("k_catch_up", fallback=None)
+        self.k_catch_up = config.getint("k_catch_up")
 
         # Statistics.
         self.axs = _init_graphing()
