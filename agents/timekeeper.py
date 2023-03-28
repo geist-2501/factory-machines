@@ -24,6 +24,9 @@ class KCatchUpTimeKeeper:
         else:
             return not self._steps > self._k_end
 
+    def should_train_q2(self) -> bool:
+        return not self._in_pretrain_mode
+
     def step(self):
         if self._in_pretrain_mode:
             self._pretrain_steps += 1
@@ -57,4 +60,4 @@ class KCatchUpTimeKeeper:
         self._in_pretrain_mode = True
 
 class SerialTimekeeper(KCatchUpTimeKeeper):
-    """Timekeeper class that implements a """
+    """Timekeeper class that implements a seperate 2-stage training program."""
