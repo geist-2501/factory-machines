@@ -13,7 +13,7 @@ from tqdm import trange, tqdm
 
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer
-from agents.timekeeper import TimeKeeper
+from agents.timekeeper import KCatchUpTimeKeeper
 from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list, SuccessRateDecay, StaticLinearDecay
 from talos import Agent, ExtraState
 
@@ -231,6 +231,9 @@ class HDQNTrainingWrapper:
         self.opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
         self.opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
 
+        self.q1_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt1, self.pretrain_steps)
+        self.q2_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt2, self.train_steps)
+
         # Init all epsilons.
         agent.eps1 = np.ones(agent.n_goals)
         agent.eps2 = 1
@@ -261,7 +264,7 @@ class HDQNTrainingWrapper:
 
     def train(self):
         env = self.env_factory(0)
-        timekeeper = TimeKeeper()
+        timekeeper = KCatchUpTimeKeeper()
 
         # Init D1.
         with trange(self.replay_buffer_size, desc="D1 Prewarm") as progress_bar:
@@ -310,7 +313,7 @@ class HDQNTrainingWrapper:
     def play_episode(
             self,
             env: gym.Env,
-            timekeeper: TimeKeeper = None,
+            timekeeper: KCatchUpTimeKeeper = None,
             learn=True,
             q1_only=False,
             show_progress=True
@@ -427,7 +430,7 @@ class HDQNTrainingWrapper:
 
     def record_statistics(
             self,
-            timekeeper: TimeKeeper,
+            timekeeper: KCatchUpTimeKeeper,
             loss,
             grad_norm,
             q1_only=False
@@ -484,7 +487,7 @@ class HDQNTrainingWrapper:
             intrinsic_rewards.append(total_intrinsic_reward)
         return np.mean(extrinsic_rewards).item(), np.mean(intrinsic_rewards).item()
 
-    def evaluate_and_graph(self, seed, timekeeper: TimeKeeper, only_q1=False):
+    def evaluate_and_graph(self, seed, timekeeper: KCatchUpTimeKeeper, only_q1=False):
 
         extrinsic_score, intrinsic_score = self.evaluate_hdqn(
             self.env_factory(seed),
@@ -590,6 +593,7 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
 
     for i in range(epsilon_history.shape[1]):
         label = "Q2" if i == 0 else f"Q1-{i - 1}"
+        label = "Q1-Out" if i == epsilon_history.shape[1] - 1 else label
         ax_epsilon.plot(epsilon_history[:, i], label=label)
     ax_epsilon.legend()
 

@@ -1,7 +1,7 @@
 from typing import Optional
 
 
-class TimeKeeper:
+class KCatchUpTimeKeeper:
     def __init__(self) -> None:
         super().__init__()
         self._in_pretrain_mode = False
@@ -55,3 +55,6 @@ class TimeKeeper:
 
     def pretrain_mode(self):
         self._in_pretrain_mode = True
+
+class SerialTimekeeper(KCatchUpTimeKeeper):
+    """Timekeeper class that implements a """
