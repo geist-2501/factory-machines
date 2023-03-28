@@ -249,7 +249,7 @@ class HDQNTrainingWrapper:
         self.k_catch_up = config.getint("k_catch_up", fallback=None)
 
         # Statistics.
-        self.axs = self.init_graphing()
+        self.axs = _init_graphing()
         self.q1_loss_history = []
         self.q2_loss_history = []
         self.q1_grad_norm_history = []
@@ -274,7 +274,7 @@ class HDQNTrainingWrapper:
         # Pretrain Q1.
         timekeeper.pretrain_mode()
         with tqdm(total=self.pretrain_steps, desc="Q1 Pretrain") as progress_bar:
-            while not self._q1_is_successful():
+            while not self._q1_is_successful() or timekeeper.get_steps() < self.pretrain_steps:
                 self.play_episode(env, timekeeper=timekeeper, learn=True, q1_only=True)
 
                 if timekeeper.get_steps() > progress_bar.total:
@@ -484,23 +484,6 @@ class HDQNTrainingWrapper:
             intrinsic_rewards.append(total_intrinsic_reward)
         return np.mean(extrinsic_rewards).item(), np.mean(intrinsic_rewards).item()
 
-    @staticmethod
-    def init_graphing():
-        if can_graph():
-            fig = plt.figure(layout="constrained")
-            gs = GridSpec(3, 3, figure=fig)
-            ax_reward = fig.add_subplot(gs[0, :-1])
-            ax_epsilon = fig.add_subplot(gs[0, -1:])
-            ax_q1_loss = fig.add_subplot(gs[1, :-1])
-            ax_q1_grad_norm = fig.add_subplot(gs[1, -1:])
-            ax_q2_loss = fig.add_subplot(gs[2, :-1])
-            ax_q2_grad_norm = fig.add_subplot(gs[2, -1:])
-            axs = (ax_reward, ax_epsilon, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm)
-        else:
-            fig, axs = None, None
-
-        return axs
-
     def evaluate_and_graph(self, seed, timekeeper: TimeKeeper, only_q1=False):
 
         extrinsic_score, intrinsic_score = self.evaluate_hdqn(
@@ -548,6 +531,35 @@ def hdqn_training_wrapper(
         artifacts,
         dqn_config
     ).train()
+
+
+def hdqn_graphing_wrapper(
+        artifacts: Dict
+):
+    _update_graphs(
+        _init_graphing(),
+        mean_reward_history=artifacts["mean_reward"],
+        loss_history=artifacts["loss"],
+        grad_norm_history=artifacts["grad_norm"],
+        epsilon_history=artifacts["epsilon"]
+    )
+
+
+def _init_graphing():
+    if can_graph():
+        fig = plt.figure(layout="constrained")
+        gs = GridSpec(3, 3, figure=fig)
+        ax_reward = fig.add_subplot(gs[0, :-1])
+        ax_epsilon = fig.add_subplot(gs[0, -1:])
+        ax_q1_loss = fig.add_subplot(gs[1, :-1])
+        ax_q1_grad_norm = fig.add_subplot(gs[1, -1:])
+        ax_q2_loss = fig.add_subplot(gs[2, :-1])
+        ax_q2_grad_norm = fig.add_subplot(gs[2, -1:])
+        axs = (ax_reward, ax_epsilon, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm)
+    else:
+        fig, axs = None, None
+
+    return axs
 
 
 def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history):

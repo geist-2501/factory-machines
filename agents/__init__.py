@@ -1,9 +1,9 @@
 from agents.dqn_agent import DQNAgent, dqn_training_wrapper, dqn_graphing_wrapper
 from agents.ds_mpd_hdqn_agent import DiscreteStochasticHDQNAgent
 from agents.fm_hdqn_agent import FactoryMachinesHDQNAgent
-from agents.heuristics.fm_simple_heuristic_agent import FMSimpleHeuristicAgent
-from agents.h_dqn_agent import hdqn_training_wrapper
+from agents.h_dqn_agent import hdqn_training_wrapper, hdqn_graphing_wrapper
 from agents.heuristics.aisled_nn_agent import AisledNNAgent
+from agents.heuristics.fm_simple_heuristic_agent import FMSimpleHeuristicAgent
 from agents.heuristics.nn_agent import NNAgent
 from talos import register_agent
 
@@ -17,7 +17,8 @@ register_agent(
 register_agent(
     agent_id="FM-HDQN",
     agent_factory=lambda obs, n_actions, device: FactoryMachinesHDQNAgent(obs, n_actions, device),
-    training_wrapper=hdqn_training_wrapper
+    training_wrapper=hdqn_training_wrapper,
+    graphing_wrapper=hdqn_graphing_wrapper
 )
 
 register_agent(
