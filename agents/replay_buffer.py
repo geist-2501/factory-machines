@@ -22,9 +22,6 @@ class ReplayBuffer(object):
 
     def add(self, obs_t, action, reward, obs_tp1, done):
         data = (obs_t, action, reward, obs_tp1, done)
-        self._add(data)
-
-    def _add(self, data):
         if self._next_idx >= len(self._storage):
             self._storage.append(data)
         else:
@@ -76,27 +73,27 @@ class ReplayBuffer(object):
         return self._encode_sample(idxes)
 
 
-class ReplayBufferWithGoals(ReplayBuffer):
-    def add_with_goal(self, obs, goal, action, reward, next_obs, done):
-        data = (obs, goal, action, reward, next_obs, done)
-        self._add(data)
+class ReplayBufferWithStats(ReplayBuffer):
+    def __init__(self, size, n_goals):
+        super().__init__(size)
+        self.n_goals = n_goals
+        self.contents = np.zeros(n_goals)
 
-    def _encode_sample(self, idxes):
-        observations, actions, goals, rewards, next_observations, dones = [], [], [], [], [], []
-        for i in idxes:
-            data = self._storage[i]
-            obs, goal, action, reward, next_obs, done = data
-            observations.append(np.array(obs, copy=False))
-            goals.append(goal)
-            actions.append(np.array(action, copy=False))
-            rewards.append(reward)
-            next_observations.append(np.array(next_obs, copy=False))
-            dones.append(done)
-        return (
-            np.array(observations),
-            np.array(goals),
-            np.array(actions),
-            np.array(rewards),
-            np.array(next_observations),
-            np.array(dones)
-        )
+    def add(self, obs_t, action, reward, obs_tp1, done):
+        goal = self._get_goal(obs_t)
+
+        self.contents[goal] += 1
+
+        data = (obs_t, action, reward, obs_tp1, done)
+        if self._next_idx >= len(self._storage):
+            self._storage.append(data)
+        else:
+            old_entry = self._storage[self._next_idx]
+            old_goal = self._get_goal(old_entry[0])
+            self.contents[old_goal] -= 1
+            self._storage[self._next_idx] = data
+        self._next_idx = (self._next_idx + 1) % self._maxsize
+
+    def _get_goal(self, obs):
+        goal_onehot = obs[-self.n_goals:]
+        return np.argmax(goal_onehot).item()

@@ -67,6 +67,15 @@ class FMHDQNAgentTest(unittest.TestCase):
 
         self.assertEqual(agent.get_intrinsic_reward(obs, env.grab, next_obs, 1), -1)
 
+    def test_should_onehot_encode_correctly(self):
+        env = FactoryMachinesRelativeWrapper(FactoryMachinesEnvMulti())
+        obs, _ = env.reset()
+        agent = FactoryMachinesHDQNAgent(obs, env.action_space.n)
+
+        onehot = agent.onehot(1, 3)
+
+        self.assertListEqual(onehot, [0, 1, 0])
+
 
 if __name__ == '__main__':
     unittest.main()

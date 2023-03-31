@@ -130,7 +130,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             }
         )
 
-        self.action_space = spaces.Discrete(6)  # Up, down, left, right, grab.
+        self.action_space = spaces.Discrete(5)  # Up, down, left, right, grab.
 
         # Utility vectors for moving the agent.
         self._action_to_direction = {
@@ -212,7 +212,6 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             # Action is a move op.
             direction = self._action_to_direction[action]
             new_pos = self._agent_loc + direction
-            # new_pos = np.clip(new_pos, 0, [self._len_x - 1, self._len_y - 1])
             if self._is_oob(new_pos[0], new_pos[1]) or self._map.layout[new_pos[1]][new_pos[0]] == 'w':
                 action_reward += self._collision_punishment
                 self._history.log("Agent bumped into a wall.")
@@ -241,6 +240,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
         if self._verbose:
             print(f"Reward: {reward}")
+            print(obs)
 
         return obs, reward, False, False, info
 

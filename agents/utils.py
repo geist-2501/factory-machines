@@ -44,11 +44,13 @@ class MeteredLinearDecay:
     def get_epsilon(self):
         return self._decay.get(self._tick)
 
-class SuccessRateDecay:
+
+class SuccessRateBasedDecay:
     def __init__(self, start_value, final_value, min_steps):
-        self._decay = MeteredLinearDecay(start_value, final_value, min_steps)
+        self._decay_limit = StaticLinearDecay(start_value, final_value, min_steps)
         self.start_value = start_value
         self.final_value = final_value
+        self._last_step = 0
         self.n_failed_attempts = 0
         self.n_successful_attempts = 0
 
@@ -59,20 +61,36 @@ class SuccessRateDecay:
 
         return self.n_successful_attempts / n_total_attempts
 
-    def next(self, was_successful: bool) -> float:
+    def next(self, step: int, was_successful: bool) -> float:
+        self._last_step = step
         if was_successful:
             self.n_successful_attempts += 1
         else:
             self.n_failed_attempts += 1
 
-        inv_success_rate = (1 - self.get_success_rate()) * self.start_value
-        minimum_decay = self._decay.next()
-        return max(inv_success_rate, minimum_decay)
+        return self.get_epsilon()
 
     def get_epsilon(self):
         inv_success_rate = (1 - self.get_success_rate()) * self.start_value
-        minimum_decay = self._decay.get_epsilon()
+        minimum_decay = self._decay_limit.get(self._last_step)
         return max(inv_success_rate, minimum_decay)
+
+
+class SuccessRateWithTimeLimitDecay:
+    """Same as SuccessRateBasedDecay but considers actions beyond a time limit unsuccessful."""
+    def __init__(self, start_value, final_value, min_steps, max_t: int):
+        self._base_decay = SuccessRateBasedDecay(start_value, final_value, min_steps)
+        self._max_t = max_t
+
+    def get_success_rate(self) -> float:
+        return self._base_decay.get_success_rate()
+
+    def next(self, step: int, was_successful: bool, duration: int) -> float:
+        was_successful &= duration <= self._max_t
+        return self._base_decay.next(step, was_successful)
+
+    def get_epsilon(self):
+        return self._base_decay.get_epsilon()
 
 def smoothen(data):
     return uniform_filter1d(data, size=30)
@@ -104,9 +122,9 @@ def evaluate(
 def flatten(obs: Dict) -> List:
     return [
         *obs["agent_loc"],
-        *obs["agent_obs"].flatten(),
+        *obs["agent_obs"],
         *obs["agent_inv"],
-        *obs["depot_locs"].flatten(),
+        *obs["depot_locs"],
         *obs["depot_queues"],
         *obs["depot_ages"],
         *obs["output_loc"],

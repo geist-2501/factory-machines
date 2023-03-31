@@ -42,20 +42,23 @@ class DQN(nn.Module):
         For batches, it returns a numpy array of actions.
         For single instances, it returns an int action.
         """
-        with torch.no_grad():
-            qvalues = self.forward(states)
 
         if len(states.shape) == 1:
             # Single version.
-            n_actions = qvalues.shape[0]
+            n_actions = self.out_size
             should_explore = np.random.choice([0, 1], p=[1 - epsilon, epsilon])
             if should_explore:
                 return np.random.choice(n_actions)
             else:
+                with torch.no_grad():
+                    qvalues = self.forward(states)
                 return qvalues.argmax().item()
 
         elif len(states.shape) == 2:
             # Batch version
+            with torch.no_grad():
+                qvalues = self.forward(states)
+
             batch_size, n_actions = qvalues.shape
 
             random_actions = np.random.choice(n_actions, size=batch_size)
@@ -97,7 +100,7 @@ def compute_td_loss(
     states = torch.tensor(states, device=net.device, dtype=torch.float32)
     actions = torch.tensor(actions, device=net.device, dtype=torch.int64)
     rewards = torch.tensor(rewards, device=net.device, dtype=torch.float32)
-    next_states = torch.tensor(next_states, device=net.device, dtype=torch.float)
+    next_states = torch.tensor(next_states, device=net.device, dtype=torch.float32)
     is_done = torch.tensor(
         is_done.astype('bool'),
         device=net.device,

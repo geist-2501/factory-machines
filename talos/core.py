@@ -1,7 +1,7 @@
 import configparser
 import time
 from collections import defaultdict
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Callable, Any
 
 import gym
 import matplotlib.pyplot as plt
@@ -11,6 +11,7 @@ from rich import print
 
 from talos.agent import Agent
 from talos.error import *
+from talos.file import TalFile
 from talos.registration import get_agent, get_wrapper, get_agent_graphing
 
 
@@ -28,6 +29,8 @@ def play_agent(
     for _ in range(max_episode_steps):
         action, extra_state = agent.get_action(obs, extra_state)
         next_obs, r, done, _, info = env.step(action)
+
+        # print(agent.get_intrinsic_reward(obs, action, next_obs, extra_state))
 
         # Some agents require extra processing (looking at you, h-DQN).
         extra_state = agent.post_step(obs, action, next_obs, extra_state)
@@ -52,6 +55,23 @@ def play_agent(
 
     env.close()
     return reward_history, info_history
+
+
+def create_save_callback(id: str, config: Dict, used_wrappers: str, env_name: str, env_args: Dict) -> Callable:
+    def callback(agent_data: Any, training_artifacts: Dict, step: int):
+        talfile = TalFile(
+            id=id,
+            agent_data=agent_data,
+            training_artifacts=training_artifacts,
+            config=config,
+            used_wrappers=used_wrappers,
+            env_name=env_name,
+            env_args=env_args
+        )
+        path_meta = "map-" + str(env_args["map_id"]) if "map_id" in env_args else "no-meta"
+        talfile.write(f"autosaved-{id}-{env_name}-{path_meta}-{step}.tal")
+
+    return callback
 
 
 def evaluate_agents(loaded_agents: List[Dict], max_episode_timesteps=1000, n_episodes=3):
@@ -90,13 +110,13 @@ def create_agent(env_factory, agent_name, device: str = get_device()):
     agent = agent_factory(
         state,
         env.action_space.n,
-        device
+        device,
     )
 
     return agent, training_wrapper
 
 
-def create_env_factory(env_name, wrapper_name=None, render_mode=None, env_args=None):
+def create_env_factory(env_name, wrapper_name=None, render_mode='rgb_array', env_args=None):
     if env_args is None:
         env_args = {}
 
