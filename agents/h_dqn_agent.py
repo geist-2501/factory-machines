@@ -215,7 +215,6 @@ class HDQNTrainingWrapper:
         self.artifacts = artifacts
         self.save_callback = save_callback
 
-        self.q1_pretrain_thresh = config.getfloat("q1_pretrain_thresh")
         self.pretrain_steps = config.getint("pretrain_steps")
         self.train_steps = config.getint("train_steps")
         self.episode_max_timesteps = config.getint("episode_max_timesteps")
@@ -248,7 +247,7 @@ class HDQNTrainingWrapper:
         q2_decay_steps = config.getint("q2_decay_steps")
         q1_decay_steps = config.getint("q1_decay_steps")
 
-        self.epsilon1_decay = [SuccessRateWithTimeLimitDecay(decay_start, decay_end, q1_decay_steps, 100)
+        self.epsilon1_decay = [SuccessRateWithTimeLimitDecay(decay_start, decay_end, q1_decay_steps, 50, 200)
                                for _ in range(agent.n_goals)]
         self.epsilon2_decay = StaticLinearDecay(decay_start, decay_end, q2_decay_steps)
 

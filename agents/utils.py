@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Dict, List
 
 import gym
@@ -45,29 +46,58 @@ class MeteredLinearDecay:
         return self._decay.get(self._tick)
 
 
+class KMemory:
+    """Memory for success rate based decay that only considers the last K attempts."""
+
+    def __init__(self, size: int) -> None:
+        self._mem = deque(maxlen=size)
+
+    def get_success_rate(self) -> float:
+        n_total_attempts = len(self._mem)
+        if n_total_attempts == 0:
+            return 0
+
+        return sum(self._mem) / n_total_attempts
+
+    def add_attempt(self, was_successful: bool):
+        self._mem.append(was_successful)
+
+
+class PermanentMemory:
+    """Memory for success rate based decay that considers all attempts."""
+
+    def __init__(self) -> None:
+        self._n_successful_attempts = 0
+        self._n_failed_attempts = 0
+
+    def get_success_rate(self) -> float:
+        n_total_attempts = self._n_successful_attempts + self._n_failed_attempts
+        if n_total_attempts == 0:
+            return 0
+
+        return self._n_successful_attempts / n_total_attempts
+
+    def add_attempt(self, was_successful: bool):
+        if was_successful:
+            self._n_successful_attempts += 1
+        else:
+            self._n_failed_attempts += 1
+
+
 class SuccessRateBasedDecay:
-    def __init__(self, start_value, final_value, min_steps):
+    def __init__(self, start_value, final_value, min_steps, memory_size: int = None):
         self._decay_limit = StaticLinearDecay(start_value, final_value, min_steps)
         self.start_value = start_value
         self.final_value = final_value
         self._last_step = 0
-        self.n_failed_attempts = 0
-        self.n_successful_attempts = 0
+        self._mem = KMemory(memory_size) if memory_size else PermanentMemory()
 
     def get_success_rate(self) -> float:
-        n_total_attempts = self.n_successful_attempts + self.n_failed_attempts
-        if n_total_attempts == 0:
-            return 0
-
-        return self.n_successful_attempts / n_total_attempts
+        return self._mem.get_success_rate()
 
     def next(self, step: int, was_successful: bool) -> float:
         self._last_step = step
-        if was_successful:
-            self.n_successful_attempts += 1
-        else:
-            self.n_failed_attempts += 1
-
+        self._mem.add_attempt(was_successful)
         return self.get_epsilon()
 
     def get_epsilon(self):
@@ -78,8 +108,8 @@ class SuccessRateBasedDecay:
 
 class SuccessRateWithTimeLimitDecay:
     """Same as SuccessRateBasedDecay but considers actions beyond a time limit unsuccessful."""
-    def __init__(self, start_value, final_value, min_steps, max_t: int):
-        self._base_decay = SuccessRateBasedDecay(start_value, final_value, min_steps)
+    def __init__(self, start_value, final_value, min_steps, max_t: int, memory_limit: int = None):
+        self._base_decay = SuccessRateBasedDecay(start_value, final_value, min_steps, memory_limit)
         self._max_t = max_t
 
     def get_success_rate(self) -> float:
@@ -91,6 +121,7 @@ class SuccessRateWithTimeLimitDecay:
 
     def get_epsilon(self):
         return self._base_decay.get_epsilon()
+
 
 def smoothen(data):
     return uniform_filter1d(data, size=30)
@@ -125,9 +156,9 @@ def flatten(obs: Dict) -> List:
         *obs["agent_obs"],
         *obs["agent_inv"],
         *obs["depot_locs"],
+        *obs["output_loc"],
         *obs["depot_queues"],
         *obs["depot_ages"],
-        *obs["output_loc"],
     ]
 
 
