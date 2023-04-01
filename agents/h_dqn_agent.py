@@ -271,7 +271,7 @@ class HDQNTrainingWrapper:
         self.q2_action_length_history = []
         self.picked_goals = np.zeros(agent.n_goals)
         self.n_goal_steps = np.zeros(agent.n_goals)
-        self.epsilon_history = np.empty(shape=(0, agent.n_goals + 1))
+        self.epsilon_history = np.empty(shape=(0, agent.n_goals + 1))  # +1 for Q2's epsilon.
 
     def train(self):
         env = self.env_factory(0)

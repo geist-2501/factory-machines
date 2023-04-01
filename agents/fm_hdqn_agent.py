@@ -15,21 +15,22 @@ class FactoryMachinesHDQNAgent(HDQNAgent):
         super().__init__(obs, n_goals, n_actions, device=device)
 
     def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:
+        reward = 0
         if self.goal_satisfied(obs, action, next_obs, goal):
-            return 5
-
-        if action == self.grab:
-            return -1
+            reward += 5
+        elif action == self.grab:
+            reward += -1
 
         if self._did_collide(obs["agent_obs"].reshape((3, 3)), action):
-            return -1
+            reward += -1
 
-        return -0.01
+        return reward - 0.01
 
     def goal_satisfied(self, obs: DictObsType, action: ActType, next_obs, goal: ActType) -> bool:
         if goal == self.n_goals - 1:
             # Last goal is the output depot.
-            return np.array_equal(next_obs["output_loc"], [0, 0])
+            return np.array_equal(obs["output_loc"], [0, 0]) \
+                or np.array_equal(next_obs["output_loc"], [0, 0])
         else:
             offset = goal * 2
             goal_depot_loc = obs["depot_locs"][offset:offset + 2]
