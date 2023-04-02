@@ -450,7 +450,7 @@ class HDQNTrainingWrapper:
             loss,
             grad_norm
     ):
-        relevant_steps = timekeeper.get_q1_steps() if timekeeper.should_train_q1() else timekeeper.get_q2_steps()
+        relevant_steps = timekeeper.get_env_steps()
         if relevant_steps % self.gather_freq == 0:
             self.epsilon_history = np.append(
                 self.epsilon_history,
