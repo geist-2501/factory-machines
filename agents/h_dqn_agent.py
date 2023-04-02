@@ -372,7 +372,7 @@ class HDQNTrainingWrapper:
                 action,
                 int_r,
                 self.agent.to_q1(next_obs, goal),
-                done
+                False
             )
 
             if learn:
@@ -535,7 +535,7 @@ class HDQNTrainingWrapper:
         self.artifacts["mean_reward"] = (self.q1_mean_reward_history, self.q2_mean_reward_history)
         self.artifacts["epsilon"] = self.epsilon_history
 
-        q1_mean_success_rate = np.mean([eps1.get_success_rate() for eps1 in self.epsilon1_decay])
+        success_rates = [f"{eps1.get_success_rate():.2f}" for eps1 in self.epsilon1_decay]
 
         q1_loss = np.nanmean(self.q1_loss_history[-10:]).item()
         q2_loss = np.nanmean(self.q2_loss_history[-10:]).item()
@@ -543,12 +543,11 @@ class HDQNTrainingWrapper:
                    f"R[Q1: {intrinsic_score:.2f}, Q2: {extrinsic_score:.2f}], "
                    f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], "
                    f"K[{timekeeper._k_end}], "
-                   f"SR[{q1_mean_success_rate:.2f}], "
+                   f"SR[{success_rates}], "
                    f"NG[{num_goals_completed:.2f}], "
                    f"Q2-Len[{np.mean(self.q2_action_length_history[-10:])}], "
                    f"D1[{self.agent.d1.contents}], "
-                   f"G[{self.picked_goals}], "
-                   f"Gt[{self.n_goal_steps}]")
+                   f"G[{self.picked_goals}]")
 
 
 def hdqn_training_wrapper(
