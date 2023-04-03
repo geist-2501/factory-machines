@@ -1,3 +1,4 @@
+import configparser
 from typing import Any, Dict
 from dataclasses import dataclass, field
 
@@ -27,6 +28,15 @@ class TalFile:
                 "env_name": self.env_name,
                 "env_args": self.env_args
             }, file)
+
+    def get_config_section(self) -> configparser.SectionProxy:
+        """Hack to recreate the SectionProxy used."""
+        config = configparser.ConfigParser()
+        config.read_dict({
+            self.id: self.config
+        })
+
+        return config[self.id]
 
 
 def read_talfile(path: str) -> TalFile:

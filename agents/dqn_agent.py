@@ -19,7 +19,7 @@ class DQNAgent(Agent):
     Deep Q-Network agent.
     Uses the technique described in Minh et al. in 'Playing Atari with Deep Reinforcement Learning'.
     """
-    def __init__(self, obs, n_actions, device='cpu'):
+    def __init__(self, obs, n_actions, hidden_layers, device='cpu'):
         super().__init__("DQN")
         self.epsilon = 1
         self.gamma = 0.99
@@ -30,6 +30,7 @@ class DQNAgent(Agent):
         obs_size = len(obs)
         self.net = DQN(obs_size, n_actions, device=device)
         self.target_net = DQN(obs_size, n_actions, device=device)
+        self.set_hidden_layers(hidden_layers)
         self.target_net.load_state_dict(self.net.state_dict())
 
     def forward(self, state):
@@ -270,4 +271,18 @@ def dqn_training_wrapper(
         evaluation_freq=dqn_config.getint("eval_freq"),
         gather_freq=dqn_config.getint("gather_freq"),
         replay_buffer_size=dqn_config.getint("replay_buffer_size")
+    )
+
+
+def dqn_agent_wrapper(
+        obs,
+        n_actions: int,
+        config: configparser.SectionProxy,
+        device='cpu'
+):
+    return DQNAgent(
+        obs=obs,
+        n_actions=n_actions,
+        hidden_layers=parse_int_list(config.get("hidden_layers")),
+        device=device
     )
