@@ -34,8 +34,6 @@ class HDQNAgent(Agent, ABC):
             obs: DictObsType,
             n_goals: int,
             n_actions: int,
-            q1_hidden_layers: List[int],
-            q2_hidden_layers: List[int],
             device: str = 'cpu'
     ) -> None:
         super().__init__("h-DQN")
@@ -59,12 +57,12 @@ class HDQNAgent(Agent, ABC):
         # Meta-controller Q network / Q2.
         self.q2_net = DQN(self._q2_obs_size, self.n_goals, device=device)
         self.q2_net_fixed = DQN(self._q2_obs_size, self.n_goals, device=device)
+        self.update_q2_fixed()
 
         # Controller Q network / Q1.
         self.q1_net = DQN(self._q1_obs_size, self.n_actions, device=device)
         self.q1_net_fixed = DQN(self._q1_obs_size, self.n_actions, device=device)
-
-        self.set_hidden_layers(q1_hidden_layers, q2_hidden_layers)
+        self.update_q1_fixed()
 
     def set_replay_buffer_size(self, size):
         self.d1 = ReplayBufferWithStats(size, self.n_goals)

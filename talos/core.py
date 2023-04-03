@@ -85,7 +85,7 @@ def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def create_agent(env_factory, agent_name, config: configparser.SectionProxy, device: str = get_device()):
+def create_agent(env_factory, agent_name, device: str = get_device()):
 
     agent_factory, training_wrapper = get_agent(agent_name)
     env = env_factory(0)
@@ -93,7 +93,6 @@ def create_agent(env_factory, agent_name, config: configparser.SectionProxy, dev
     agent = agent_factory(
         state,
         env.action_space.n,
-        config,
         device,
     )
 

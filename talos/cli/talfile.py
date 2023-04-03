@@ -96,10 +96,8 @@ def replay(
     else:
         print(f"Overwriting wrapper specified in talfile ({talfile.used_wrappers}) with {opt_wrapper}")
 
-    opt_env_args = {**opt_env_args, **talfile.env_args}
-
     env_factory = create_env_factory(opt_env, opt_wrapper, render_mode=opt_render, env_args=opt_env_args)
-    agent, _ = create_agent(env_factory, talfile.id, talfile.get_config_section())
+    agent, _ = create_agent(env_factory, talfile.id)
     agent.load(talfile.agent_data)
 
     env = env_factory(opt_seed)

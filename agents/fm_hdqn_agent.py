@@ -1,20 +1,18 @@
-import configparser
-
 import numpy as np
 
 from agents.h_dqn_agent import HDQNAgent, DictObsType, FlatObsType, ActType
-from agents.utils import flatten, parse_int_list
+from agents.utils import flatten
 
 
 class FactoryMachinesHDQNAgent(HDQNAgent):
 
     up, left, down, right, grab = range(5)
 
-    def __init__(self, obs: DictObsType, n_actions: int, q1_hidden_layers, q2_hidden_layers, device: str = 'cpu') -> None:
+    def __init__(self, obs: DictObsType, n_actions: int, device: str = 'cpu') -> None:
         # Depot locations is a flattened x,y list, so half it's size for the total number of locations,
         # and add one for the output location.
         n_goals = (len(obs["depot_locs"]) // 2) + 1
-        super().__init__(obs, n_goals, n_actions, q1_hidden_layers, q2_hidden_layers, device=device)
+        super().__init__(obs, n_goals, n_actions, device=device)
 
     def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:
         reward = 0
@@ -49,18 +47,3 @@ class FactoryMachinesHDQNAgent(HDQNAgent):
             or (action == self.down and local_obs[2, 1] == 1) \
             or (action == self.right and local_obs[1, 2] == 1) \
             or (action == self.left and local_obs[1, 0] == 1)
-
-
-def fm_hdqn_agent_wrapper(
-        obs,
-        n_actions,
-        config: configparser.SectionProxy,
-        device
-) -> FactoryMachinesHDQNAgent:
-    return FactoryMachinesHDQNAgent(
-        obs=obs,
-        n_actions=n_actions,
-        q1_hidden_layers=parse_int_list(config.get("q1_hidden_layers")),
-        q2_hidden_layers=parse_int_list(config.get("q2_hidden_layers")),
-        device=device
-    )
