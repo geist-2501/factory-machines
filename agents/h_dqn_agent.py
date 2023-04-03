@@ -208,12 +208,10 @@ class HDQNTrainingWrapper:
             agent: HDQNAgent,
             artifacts: Dict,
             config: configparser.SectionProxy,
-            save_callback: Callable
     ) -> None:
         self.env_factory = env_factory
         self.agent = agent
         self.artifacts = artifacts
-        self.save_callback = save_callback
 
         self.pretrain_steps = config.getint("pretrain_steps")
         self.train_steps = config.getint("train_steps")
@@ -555,14 +553,12 @@ def hdqn_training_wrapper(
         agent: HDQNAgent,
         dqn_config: configparser.SectionProxy,
         artifacts: Dict,
-        save_callback: Callable
 ):
     HDQNTrainingWrapper(
         env_factory,
         agent,
         artifacts,
         dqn_config,
-        save_callback
     ).train()
 
 
