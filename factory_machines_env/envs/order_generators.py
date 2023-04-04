@@ -36,19 +36,25 @@ class BinomialOrderGenerator(OrderGenerator):
 
 class GaussianOrderGenerator(OrderGenerator):
 
-    def __init__(self, p: List[float], max_order_size: int) -> None:
+    def __init__(self, p: List[float], max_order_size: int, generator=None) -> None:
         super().__init__()
+        if generator is None:
+            generator = np.random.default_rng()
+        self._random = generator
         p = np.array(p)
         self._p = p / p.sum()
         self._max = max_order_size
 
+    def set_seed(self, seed: int) -> None:
+        self._random = np.random.default_rng(seed)
+
     def should_make_order(self, num_current_orders: int) -> bool:
-        return bool(np.random.binomial(1, 0.1)) or num_current_orders == 0
+        return bool(self._random.binomial(1, 0.1)) or num_current_orders == 0
 
     def make_order(self, size) -> OrderType:
         order = np.zeros(size, dtype=int)
         num_items = np.floor(np.random.triangular(1, self._max / 2, self._max)).astype(int)
-        items = np.random.choice(size, size=num_items, p=self._p, replace=False)
+        items = self._random.choice(size, size=num_items, p=self._p, replace=False)
         order[items] = 1
         return order
 

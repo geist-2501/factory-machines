@@ -4,7 +4,9 @@ from factory_machines_env.wrappers import \
     FactoryMachinesFlattenRelativeWrapper, \
     FactoryMachinesRelativeWrapper, \
     ArrayWrapper, \
-    GridWorldFlattenRelativeWrapper, GridWorldRelativeWrapper
+    GridWorldFlattenRelativeWrapper, \
+    GridWorldRelativeWrapper, \
+    OrderWorldFlattenWrapper
 from talos import register_wrapper
 
 register(
@@ -28,6 +30,12 @@ register(
 register(
     id='GridWorld-v0',
     entry_point='factory_machines_env.envs:GridWorldBasic',
+    max_episode_steps=300,
+)
+
+register(
+    id='OrderWorld-v0',
+    entry_point='factory_machines_env.envs:OrderWorldBasic',
     max_episode_steps=300,
 )
 
@@ -59,4 +67,9 @@ register_wrapper(
 register_wrapper(
     wrapper_id='Array',
     wrapper_factory=lambda outer: ArrayWrapper(outer)
+)
+
+register_wrapper(
+    wrapper_id='OWFlatten',
+    wrapper_factory=lambda outer: OrderWorldFlattenWrapper(outer)
 )
