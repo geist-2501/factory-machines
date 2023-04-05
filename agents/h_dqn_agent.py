@@ -2,7 +2,7 @@ import configparser
 import time
 from abc import ABC, abstractmethod
 from operator import itemgetter
-from typing import Dict, Callable, Tuple, Any, TypeVar, List
+from typing import Dict, Callable, Tuple, Any, TypeVar, List, Optional
 
 import gym
 import matplotlib.pyplot as plt
@@ -204,7 +204,7 @@ class HDQNAgent(Agent, ABC):
 class HDQNTrainingWrapper:
     def __init__(
             self,
-            env_factory: Callable[[int], gym.Env],
+            env_factory: Callable[[Optional[int]], gym.Env],
             agent: HDQNAgent,
             artifacts: Dict,
             config: configparser.SectionProxy,
@@ -272,7 +272,7 @@ class HDQNTrainingWrapper:
         self.epsilon_history = np.empty(shape=(0, agent.n_goals + 1))  # +1 for Q2's epsilon.
 
     def train(self):
-        env = self.env_factory(0)
+        env = self.env_factory(None)  # Use base seed.
         timekeeper = KCatchUpTimeKeeper()
         timekeeper.pretrain_mode()
 

@@ -99,7 +99,7 @@ def create_agent(env_factory, agent_name, device: str = get_device()):
     return agent, training_wrapper
 
 
-def create_env_factory(env_name, wrapper_name=None, render_mode='rgb_array', env_args=None):
+def create_env_factory(env_name, wrapper_name=None, render_mode='rgb_array', env_args=None, base_seed: int = 0):
     if env_args is None:
         env_args = {}
 
@@ -108,6 +108,8 @@ def create_env_factory(env_name, wrapper_name=None, render_mode='rgb_array', env
 
         if seed is not None:
             env.reset(seed=seed)
+        else:
+            env.reset(seed=base_seed)
 
         if wrapper_name is not None:
             wrapper_factory = get_wrapper(wrapper_name)

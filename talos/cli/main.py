@@ -84,6 +84,11 @@ def train(
         opt_autosave: Optional[str] = typer.Option(
             None,
             "--autosave-path"
+        ),
+        opt_seed: int = typer.Option(
+            0,
+            "--seed",
+            "-s"
         )
 ) -> None:
     """Train an agent on a given environment."""
@@ -101,7 +106,7 @@ def train(
         print("[bold green]failure![/]")
         raise typer.Abort()
 
-    env_factory = create_env_factory(opt_env, opt_wrapper, env_args=opt_env_args)
+    env_factory = create_env_factory(opt_env, opt_wrapper, env_args=opt_env_args, base_seed=opt_seed)
     agent, training_wrapper = create_agent(env_factory, opt_agent, device=device)
 
     agent_config = config[opt_agent] if opt_agent in config.sections() else config['DEFAULT']
