@@ -7,7 +7,7 @@ import pygame
 from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
 
-from factory_machines_env.envs.order_generators import GaussianOrderGenerator
+from factory_machines_env.envs.order_generators import GaussianOrderGenerator, OrderGenerator
 from factory_machines_env.envs.pygame_utils import draw_lines
 
 Coord = np.ndarray
@@ -45,16 +45,19 @@ class OrderWorldMap:
         n_depots = len(depots)
 
         # Build route lengths.
-        routes = np.zeros((n_depots, n_depots))
+        routes = np.ones((n_depots, n_depots))
         for i1, c1 in enumerate(depots):
             for i2, c2 in enumerate(depots):
+                if i1 == i2:
+                    continue
                 routes[i1, i2] = self._euclidean_distance(c1, c2)
 
         return n_depots, routes
 
     @staticmethod
     def _euclidean_distance(c1: Coord, c2: Coord) -> float:
-        return math.sqrt((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2)
+        dist = math.sqrt((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2)
+        return round(dist, 1)
 
 
 class OrderWorldBasic(gym.Env):
@@ -79,26 +82,31 @@ class OrderWorldBasic(gym.Env):
         ])
     }
 
-    _travel_cost = -0.1
+    _travel_punishment = -0.1
     _agent_cap = 10
-    _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
+    _item_dropoff_reward = 2  # The amount of reward for dropping off a needed item.
+    _item_pickup_reward = 2
+    _item_pickup_punishment = -0.5
     _reward_per_order = 10  # The amount of reward for dropping off a needed item.
 
     def __init__(
             self,
             render_mode: Optional[str] = None,
             map_id: str = "easy",
-            num_orders: int = 10
+            num_orders: int = 10,
+            generator: OrderGenerator = None
     ) -> None:
         super().__init__()
 
         self._map = self.maps[map_id]
         self._n_depots = self._map.n_depots
-        n_item_depots = self._n_depots - 1
+        self._n_item_depots = self._n_depots - 1
 
-        self._order_generator = GaussianOrderGenerator(self._map.p, 4, generator=np.random.default_rng())
-        self._current_depot = 0
-        self._agent_inv = np.zeros(n_item_depots, dtype=int)
+        self._order_generator = GaussianOrderGenerator(self._map.p, 4, generator=np.random.default_rng()) \
+            if generator is None else generator
+
+        self._current_depot = self._n_item_depots
+        self._agent_inv = np.zeros(self._n_item_depots, dtype=int)
 
         num_orders = int(num_orders)
         self._n_orders_total = num_orders
@@ -111,8 +119,8 @@ class OrderWorldBasic(gym.Env):
         self.observation_space = spaces.Dict(
             {
                 "agent_loc": spaces.Box(0, 1, shape=(self._n_depots,), dtype=int),
-                "agent_inv": spaces.Box(0, 10, shape=(n_item_depots,), dtype=int),
-                "depot_queues": spaces.Box(0, 10, shape=(n_item_depots,), dtype=int),
+                "agent_inv": spaces.Box(0, 10, shape=(self._n_item_depots,), dtype=int),
+                "depot_queues": spaces.Box(0, 10, shape=(self._n_item_depots,), dtype=int),
             }
         )
 
@@ -129,9 +137,10 @@ class OrderWorldBasic(gym.Env):
             self._order_generator.set_seed(seed)
 
         self._timestep = 0
-        self._current_depot = 0
+        self._current_depot = self._n_item_depots
+        self._agent_inv = np.zeros(self._n_item_depots, dtype=int)
         self._n_orders_left = self._n_orders_total
-        self._open_orders: List[Tuple[int, np.ndarray]] = []
+        self._open_orders = []
 
         return self._get_obs(), {}
 
@@ -140,7 +149,7 @@ class OrderWorldBasic(gym.Env):
         target_depot = action
         # Go to depot and grab an item from it. If the depot is not the current depot, incur a cost.
         reward = 0
-        reward += self._map.routes[self._current_depot, target_depot] * self._travel_cost
+        reward += self._map.routes[self._current_depot, target_depot] * self._travel_punishment
         self._current_depot = target_depot
         if self._current_depot == self._n_depots - 1:
             # Depot is the output depot, complete orders.
@@ -153,13 +162,16 @@ class OrderWorldBasic(gym.Env):
         should_create_order = self._order_generator.should_make_order(len(self._open_orders))
         if should_create_order and self._n_orders_left > 0:
             self._n_orders_left -= 1
-            order = self._order_generator.make_order(self._n_depots - 1)
+            order = self._order_generator.make_order(self._n_item_depots)
             self._open_orders.append((self._timestep, order))
 
         terminated = self._n_orders_left == 0 and len(self._open_orders) == 0
         reward += 100 if terminated else 0
 
         self._timestep += 1
+
+        if self.render_mode == "human":
+            self.render()
 
         return self._get_obs(), reward, terminated, False, {}
 
@@ -234,15 +246,15 @@ class OrderWorldBasic(gym.Env):
         queues = self._get_depot_queues()
         item_queue = queues[self._current_depot]
         if self._agent_inv[self._current_depot] >= self._agent_cap:
-            return -1
+            return self._item_pickup_punishment
 
         elif self._agent_inv[self._current_depot] < item_queue:
             self._agent_inv[self._current_depot] += 1
-            return 1
+            return self._item_pickup_reward
 
         elif self._agent_inv[self._current_depot] >= item_queue:
             self._agent_inv[self._current_depot] += 1
-            return -1
+            return self._item_pickup_punishment
 
         raise RuntimeError("Shouldn't have gotten here lol")
 

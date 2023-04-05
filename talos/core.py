@@ -30,8 +30,6 @@ def play_agent(
         action, extra_state = agent.get_action(obs, extra_state)
         next_obs, r, done, _, info = env.step(action)
 
-        # print(agent.get_intrinsic_reward(obs, action, next_obs, extra_state))
-
         # Some agents require extra processing (looking at you, h-DQN).
         extra_state = agent.post_step(obs, action, next_obs, extra_state)
 
