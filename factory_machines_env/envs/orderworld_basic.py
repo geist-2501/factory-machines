@@ -79,13 +79,20 @@ class OrderWorldBasic(gym.Env):
             '..d..',
             'd...d',
             '..d..',
+        ]),
+        "medium-2": OrderWorldMap([
+            '...o...',
+            '.d...d.',
+            '.d...d.',
+            '.d...d.',
+            '.......',
         ])
     }
 
     _travel_punishment = -0.1
     _agent_cap = 10
-    _item_dropoff_reward = 2  # The amount of reward for dropping off a needed item.
-    _item_pickup_reward = 2
+    _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
+    _item_pickup_reward = 0.5
     _item_pickup_punishment = -0.5
     _reward_per_order = 10  # The amount of reward for dropping off a needed item.
 
