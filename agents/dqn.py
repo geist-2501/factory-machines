@@ -108,11 +108,10 @@ def compute_td_loss(
     )
 
     predicted_qvalues = net(states)
+    predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]
 
     with torch.no_grad():
         predicted_next_qvalues = net_fixed(next_states)
-
-    predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]
 
     next_state_values, _ = torch.max(predicted_next_qvalues, dim=1)
 

@@ -1,6 +1,11 @@
 import unittest
 
-from agents.timekeeper import KCatchUpTimeKeeper
+from agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper
+
+
+def repeat(func, iters):
+    for _ in range(iters):
+        func()
 
 
 class TimekeeperTest(unittest.TestCase):
@@ -32,7 +37,7 @@ class TimekeeperTest(unittest.TestCase):
 
     def test_timekeeper_should_allow_q1_training(self):
         timekeeper = KCatchUpTimeKeeper()
-        self._step(timekeeper, 3)
+        repeat(lambda: timekeeper.step_q1(), 3)
         timekeeper.set_k_catch_up(5)
         self.assertTrue(timekeeper.should_train_q1())
         self._step(timekeeper, 3)
@@ -41,6 +46,17 @@ class TimekeeperTest(unittest.TestCase):
         self.assertFalse(timekeeper.should_train_q1())
         self._meta(timekeeper, 8)
         self.assertTrue(timekeeper.should_train_q1())
+
+    def test_2_serial_timekeeper_should_select_correct_training_windows(self):
+        timekeeper = SerialTimekeeper()
+
+        timekeeper.pretrain_mode()
+        self.assertTrue(timekeeper.should_train_q1())
+        self.assertFalse(timekeeper.should_train_q2())
+
+        timekeeper.train_mode()
+        self.assertFalse(timekeeper.should_train_q1())
+        self.assertTrue(timekeeper.should_train_q2())
 
     @staticmethod
     def _step(timekeeper: KCatchUpTimeKeeper, num: int):

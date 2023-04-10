@@ -32,6 +32,7 @@ def view(path: str):
     print(f"[bold white]Agent name[/]:       {talfile.id}")
     print(f"[bold white]Environment used[/]: {talfile.env_name}")
     print(f"[bold white]Wrapper used[/]:     {talfile.used_wrappers}")
+    print(f"[bold white]Env args[/]:         {talfile.env_args}")
     print("[bold white]Configuration used[/]:")
     print(talfile.config)
 

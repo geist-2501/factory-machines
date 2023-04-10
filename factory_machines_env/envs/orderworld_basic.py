@@ -89,10 +89,12 @@ class OrderWorldBasic(gym.Env):
         ])
     }
 
-    _travel_punishment = -0.1
     _agent_cap = 10
+
+    # Rewards.
+    _travel_punishment = -0.1
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
-    _item_pickup_reward = 0.5
+    _item_pickup_reward = 1
     _item_pickup_punishment = -0.5
     _reward_per_order = 10  # The amount of reward for dropping off a needed item.
 
@@ -156,7 +158,8 @@ class OrderWorldBasic(gym.Env):
         target_depot = action
         # Go to depot and grab an item from it. If the depot is not the current depot, incur a cost.
         reward = 0
-        reward += self._map.routes[self._current_depot, target_depot] * self._travel_punishment
+        distance_travelled = self._map.routes[self._current_depot, target_depot]
+        reward += distance_travelled * self._travel_punishment
         self._current_depot = target_depot
         if self._current_depot == self._n_depots - 1:
             # Depot is the output depot, complete orders.
@@ -166,7 +169,10 @@ class OrderWorldBasic(gym.Env):
             reward += self._grab_item()
 
         # Process orders.
-        should_create_order = self._order_generator.should_make_order(len(self._open_orders))
+        should_create_order = self._order_generator.should_make_order(
+            len(self._open_orders),
+            elapsed_steps=round(distance_travelled)
+        )
         if should_create_order and self._n_orders_left > 0:
             self._n_orders_left -= 1
             order = self._order_generator.make_order(self._n_item_depots)

@@ -14,7 +14,7 @@ from tqdm import trange, tqdm
 
 from agents.dqn import DQN, compute_td_loss
 from agents.replay_buffer import ReplayBuffer, ReplayBufferWithStats
-from agents.timekeeper import KCatchUpTimeKeeper
+from agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list, SuccessRateBasedDecay, \
     StaticLinearDecay, SuccessRateWithTimeLimitDecay
 from talos import Agent, ExtraState
@@ -109,7 +109,7 @@ class HDQNAgent(Agent, ABC):
                 # If no goal is given, get one from the meta-controller.
                 meta_controller_obs = self.to_q2(obs)
                 goal = self.get_epsilon(meta_controller_obs, epsilon=0, net=self.q2_net)
-
+            # print(f"Picked goal {goal}")
         # Get an action from the controller, incorporating the goal.
         controller_obs = self.to_q1(obs, goal)
         action = self.get_epsilon(controller_obs, epsilon=0, net=self.q1_net)
@@ -119,6 +119,7 @@ class HDQNAgent(Agent, ABC):
     def post_step(self, obs, action, next_obs, extra_state: ExtraState = None) -> ExtraState:
         goal = extra_state
         if self.goal_satisfied(obs, action, next_obs, goal):
+            # print(f"Completed goal {goal}")
             goal = None
         return goal
 
@@ -273,7 +274,7 @@ class HDQNTrainingWrapper:
 
     def train(self):
         env = self.env_factory(0)
-        timekeeper = KCatchUpTimeKeeper()
+        timekeeper = SerialTimekeeper()
         timekeeper.pretrain_mode()
 
         # Init D1.
@@ -304,7 +305,8 @@ class HDQNTrainingWrapper:
 
         # Train Q1 & Q2.
         timekeeper.train_mode()
-        timekeeper.set_k_catch_up(self.k_catch_up)
+        if type(timekeeper) is KCatchUpTimeKeeper:
+            timekeeper.set_k_catch_up(self.k_catch_up)
         with trange(self.train_steps, desc="Q2 Steps") as q2_progress_bar:
             with trange(self.train_steps, desc="Q1 Steps") as q1_progress_bar:
                 while timekeeper.get_q2_steps() < self.train_steps or timekeeper.get_q1_steps() < self.train_steps:
@@ -322,7 +324,7 @@ class HDQNTrainingWrapper:
     def play_episode(
             self,
             env: gym.Env,
-            timekeeper: KCatchUpTimeKeeper = None,
+            timekeeper: TimeKeeper = None,
             learn=True,
             show_progress=True
     ):
@@ -397,7 +399,7 @@ class HDQNTrainingWrapper:
                     goal,
                     meta_r,
                     self.agent.to_q2(next_obs),
-                    done
+                    False
                 )
 
                 self.q2_action_length_history.append(meta_t)
@@ -444,7 +446,7 @@ class HDQNTrainingWrapper:
 
     def record_statistics(
             self,
-            timekeeper: KCatchUpTimeKeeper,
+            timekeeper: TimeKeeper,
             loss,
             grad_norm
     ):
@@ -505,10 +507,10 @@ class HDQNTrainingWrapper:
 
             goals_completed.append(num_goals_completed)
             extrinsic_rewards.append(total_extrinsic_reward if only_q1 is False else np.nan)
-            intrinsic_rewards.append(total_intrinsic_reward)
+            intrinsic_rewards.append(total_intrinsic_reward / max(1, num_goals_completed))
         return np.mean(extrinsic_rewards).item(), np.mean(intrinsic_rewards).item(), np.mean(goals_completed).item()
 
-    def evaluate_and_graph(self, seed, timekeeper: KCatchUpTimeKeeper):
+    def evaluate_and_graph(self, seed, timekeeper: TimeKeeper):
 
         extrinsic_score, intrinsic_score, num_goals_completed = self.evaluate_hdqn(
             self.env_factory(seed),
@@ -535,12 +537,14 @@ class HDQNTrainingWrapper:
 
         success_rates = [f"{eps1.get_success_rate():.2f}" for eps1 in self.epsilon1_decay]
 
+        k_end = timekeeper._k_end if type(timekeeper) is KCatchUpTimeKeeper else "N/A"
+
         q1_loss = np.nanmean(self.q1_loss_history[-10:]).item()
         q2_loss = np.nanmean(self.q2_loss_history[-10:]).item()
         tqdm.write(f"T[Q1: {timekeeper.get_q1_steps()}, Q2: {timekeeper.get_q2_steps()}], "
                    f"R[Q1: {intrinsic_score:.2f}, Q2: {extrinsic_score:.2f}], "
                    f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], "
-                   f"K[{timekeeper._k_end}], "
+                   f"K[{k_end}], "
                    f"SR[{success_rates}], "
                    f"NG[{num_goals_completed:.2f}], "
                    f"Q2-Len[{np.mean(self.q2_action_length_history[-10:])}], "

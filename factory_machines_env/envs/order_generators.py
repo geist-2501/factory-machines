@@ -48,8 +48,10 @@ class GaussianOrderGenerator(OrderGenerator):
     def set_seed(self, seed: int) -> None:
         self._random = np.random.default_rng(seed)
 
-    def should_make_order(self, num_current_orders: int) -> bool:
-        return bool(self._random.binomial(1, 0.1)) or num_current_orders == 0
+    def should_make_order(self, num_current_orders: int, elapsed_steps=1) -> bool:
+        if elapsed_steps < 1:
+            elapsed_steps = 1
+        return bool(self._random.binomial(elapsed_steps, 0.1)) or num_current_orders == 0
 
     def make_order(self, size) -> OrderType:
         order = np.zeros(size, dtype=int)
