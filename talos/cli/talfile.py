@@ -178,8 +178,8 @@ def compare(
                 "env_name": talfile.env_name,
                 "env_factory": agent_env_factory
             })
-            extra_info = f"Uses {talfile.env_name}" \
-                         + f" with wrapper {talfile.used_wrappers}." if talfile.used_wrappers else "."
+            extra_info = f"Uses {talfile.env_name}"
+            extra_info += f" with wrapper {talfile.used_wrappers}." if talfile.used_wrappers else "."
             print(f"[bold green]success![/] {extra_info}")
         except RuntimeError as ex:
             print("[bold red]failed![/] Couldn't load .tal file. " + str(ex))

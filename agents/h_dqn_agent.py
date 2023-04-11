@@ -274,7 +274,7 @@ class HDQNTrainingWrapper:
 
     def train(self):
         env = self.env_factory(0)
-        timekeeper = SerialTimekeeper()
+        timekeeper = SerialTimekeeper() if self.k_catch_up is None else KCatchUpTimeKeeper()
         timekeeper.pretrain_mode()
 
         # Init D1.
@@ -309,7 +309,9 @@ class HDQNTrainingWrapper:
             timekeeper.set_k_catch_up(self.k_catch_up)
         with trange(self.train_steps, desc="Q2 Steps") as q2_progress_bar:
             with trange(self.train_steps, desc="Q1 Steps") as q1_progress_bar:
-                while timekeeper.get_q2_steps() < self.train_steps or timekeeper.get_q1_steps() < self.train_steps:
+                q2_done = timekeeper.get_q2_steps() >= self.train_steps
+                q1_done = timekeeper.get_q1_steps() >= self.train_steps or type(timekeeper) is SerialTimekeeper
+                while not q2_done or not q1_done:
 
                     self.play_episode(env, timekeeper=timekeeper, learn=True, show_progress=True)
 
@@ -399,7 +401,7 @@ class HDQNTrainingWrapper:
                     goal,
                     meta_r,
                     self.agent.to_q2(next_obs),
-                    False
+                    done
                 )
 
                 self.q2_action_length_history.append(meta_t)

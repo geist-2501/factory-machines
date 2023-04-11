@@ -29,6 +29,14 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             [0.1, 0.2, 0.6],
             3
         ),
+        "0-longer": Map([
+            'o.d.d',
+            '.....',
+            'd.d.d',
+        ],
+            [1, 1, 1, 1, 1],
+            3
+        ),
         "1": Map([
             'o.w.d',
             '..w..',
@@ -154,21 +162,14 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     def _get_obs(self):
 
         local_obs = np.zeros((3, 3))
-        if self._correct_obs:
-            a_x, a_y = self._agent_loc
-            for x in range(3):
-                for y in range(3):
-                    map_x = a_x + x - 1
-                    map_y = a_y + y - 1
-                    if self._is_oob(map_x, map_y) or self._map.layout[map_y][map_x] == 'w':
-                        local_obs[y, x] = 1
-        else:
-            for x in range(-1, 2):
-                for y in range(-1, 2):
-                    offset_x = self._agent_loc[0] + x
-                    offset_y = self._agent_loc[1] + y
-                    if self._is_oob(offset_x, offset_y):
-                        local_obs[x, y] = 1
+
+        a_x, a_y = self._agent_loc
+        for x in range(3):
+            for y in range(3):
+                map_x = a_x + x - 1
+                map_y = a_y + y - 1
+                if self._is_oob(map_x, map_y) or self._map.layout[map_y][map_x] == 'w':
+                    local_obs[y, x] = 1
 
         return {
             "agent_loc": self._agent_loc,

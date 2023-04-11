@@ -43,3 +43,22 @@ Start getting scenarios for eval of increasing complexity.
    - design/method is enough to implement. Things like strategy.
      - Mention changes and justify using papers.
    - impl is specific details. Address hDQN.
+
+# Notes for WK10
+
+ - HDQN FIXED 🎉
+   - Kinda sucks. Needs more time training to be sure.
+   - Doesn't work on the largest env, which is disappointing.
+ - Can start evaluation and discussion sections.
+
+# Notes for WK??
+
+- HDQN still not working.
+  - Got simplified simulator working, DQN gets optimal policy.
+  - Got some more tweaking on the simulator to do.
+  - 99% confident the lower level network is not the issue.
+
+# HDQN Notes.
+
+Need to diagnose why it performs poorly. Options are;
+- Isolate the metacontroller. Either use oracle or frozen network for the controller.
