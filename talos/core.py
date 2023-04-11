@@ -180,15 +180,14 @@ def create_save_callback(id: str, config: Dict, used_wrappers: str, env_name: st
         )
         path_meta = "map-" + str(env_args["map_id"]) if "map_id" in env_args else "no-meta"
         filename_parts = [
-            "autosaved",
             id,
             env_name,
             path_meta,
-            step,
-            ".tal"
+            str(step),
+            "autosave.tal"
         ]
         if prefix:
-            filename_parts.insert(1, prefix)
+            filename_parts.insert(0, prefix)
         talfile.write('-'.join(filename_parts))
 
     return callback

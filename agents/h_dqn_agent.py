@@ -1,4 +1,5 @@
 import configparser
+import math
 import time
 from abc import ABC, abstractmethod
 from operator import itemgetter
@@ -17,7 +18,7 @@ from agents.replay_buffer import ReplayBuffer, ReplayBufferWithStats
 from agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from agents.utils import can_graph, smoothen, MeteredLinearDecay, parse_int_list, SuccessRateBasedDecay, \
     StaticLinearDecay, SuccessRateWithTimeLimitDecay
-from talos import Agent, ExtraState
+from talos import Agent, ExtraState, EnvFactory, SaveCallback
 
 DictObsType = TypeVar("DictObsType")
 FlatObsType = TypeVar("FlatObsType")
@@ -205,14 +206,16 @@ class HDQNAgent(Agent, ABC):
 class HDQNTrainingWrapper:
     def __init__(
             self,
-            env_factory: Callable[[int], gym.Env],
+            env_factory: EnvFactory,
             agent: HDQNAgent,
             artifacts: Dict,
             config: configparser.SectionProxy,
+            save_callback: SaveCallback
     ) -> None:
         self.env_factory = env_factory
         self.agent = agent
         self.artifacts = artifacts
+        self.save_callback = save_callback
 
         self.pretrain_steps = config.getint("pretrain_steps")
         self.train_steps = config.getint("train_steps")
@@ -258,6 +261,10 @@ class HDQNTrainingWrapper:
 
         replay_buffer_size = config.getint("replay_buffer_size")
         self.agent.set_replay_buffer_size(replay_buffer_size)
+
+        self.best_agent_score = (-math.inf, None)
+        self.n_save_after_peak = 20
+        self.n_since_last_peak = 0
 
         # Statistics.
         self.axs = _init_graphing()
@@ -524,6 +531,17 @@ class HDQNTrainingWrapper:
         self.q2_mean_reward_history.append(extrinsic_score)
         self.q1_mean_reward_history.append(intrinsic_score)
 
+        high_score, _ = self.best_agent_score
+        if extrinsic_score != np.nan and extrinsic_score > self.best_agent_score[0]:
+            tqdm.write(f"New personal best set: {high_score:.2f} -> {extrinsic_score:.2f}")
+            self.best_agent_score = extrinsic_score, self.agent.save()
+            self.n_since_last_peak = 0
+        else:
+            self.n_since_last_peak += 1
+            if self.n_since_last_peak == self.n_save_after_peak:
+                tqdm.write("Saving snapshot...")
+                self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps(), f"peak-{extrinsic_score}")
+
         _update_graphs(
             self.axs,
             (self.q1_mean_reward_history, self.q2_mean_reward_history),
@@ -566,6 +584,7 @@ def hdqn_training_wrapper(
         agent,
         artifacts,
         dqn_config,
+        save_callback
     ).train()
 
 
