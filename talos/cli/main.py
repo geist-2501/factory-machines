@@ -8,7 +8,7 @@ from talos.cli.cli_utils import _convert_to_key_value_list, _convert_to_key_list
 from talos.cli.config import app as config_app
 from talos.cli.list import app as list_app
 from talos.cli.talfile import talfile_app
-from talos.core import load_config, create_env_factory, get_device, create_agent
+from talos.core import load_config, create_env_factory, get_device, create_agent, create_save_callback
 from talos.error import *
 from talos.file import TalFile
 
@@ -118,7 +118,8 @@ def train(
 
     training_artifacts = {}
     try:
-        training_wrapper(env_factory, agent, agent_config, training_artifacts)
+        save_callback = create_save_callback(opt_agent, dict(agent_config), opt_wrapper, opt_env, opt_env_args)
+        training_wrapper(env_factory, agent, agent_config, training_artifacts, save_callback)
     except KeyboardInterrupt:
         print("[bold red]Training interrupted[/bold red].")
 

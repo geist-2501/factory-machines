@@ -13,9 +13,9 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
     _reward_per_order = 10  # The amount of reward for a fulfilled order.
     _item_pickup_reward = 1  # The amount of reward for picking up a needed item.
-    _item_pickup_punishment = -0.5  # The amount of reward for picking up an item it shouldn't.
+    _item_pickup_punishment = -1  # The amount of reward for picking up an item it shouldn't.
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
-    _collision_punishment = -1  # TODO Change this!
+    _collision_punishment = -1
 
     _age_bands = 3  # The number of stages of 'oldness'.
     _age_max_timesteps = 100  # The amount of timesteps that can elapse before an order is considered old.

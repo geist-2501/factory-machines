@@ -246,7 +246,7 @@ class HDQNTrainingWrapper:
         q2_decay_steps = config.getint("q2_decay_steps")
         q1_decay_steps = config.getint("q1_decay_steps")
 
-        self.epsilon1_decay = [SuccessRateWithTimeLimitDecay(decay_start, decay_end, q1_decay_steps, 50, 200)
+        self.epsilon1_decay = [SuccessRateWithTimeLimitDecay(decay_start, decay_end, q1_decay_steps, 30, 500)
                                for _ in range(agent.n_goals)]
         self.epsilon2_decay = StaticLinearDecay(decay_start, decay_end, q2_decay_steps)
 
@@ -321,7 +321,7 @@ class HDQNTrainingWrapper:
                     q1_progress_bar.refresh()
 
     def _q1_is_successful(self):
-        return all([decay.get_success_rate() > 0.95 for decay in self.epsilon1_decay])
+        return all([decay.get_success_rate() > 0.98 for decay in self.epsilon1_decay])
 
     def play_episode(
             self,

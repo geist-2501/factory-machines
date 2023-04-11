@@ -175,6 +175,7 @@ def train_dqn_agent(
     artifacts["grad_norm"] = grad_norm_history
 
     for step in trange(0, max_steps):
+        opt.zero_grad()
 
         agent.epsilon = epsilon_decay.get(step)
 
@@ -188,7 +189,6 @@ def train_dqn_agent(
         grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
         opt.step()
         lr_sched.step()
-        opt.zero_grad()
 
         if step % update_target_net_freq == 0:
             # Load agent weights into target_network
@@ -207,7 +207,11 @@ def train_dqn_agent(
 
             _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history)
 
-            tqdm.write(f"iter: {step: 10.0f} eps: {agent.epsilon: 10.1f}\tscore: {score: 10.2f}\t loss: {loss: 10.2f}")
+            tqdm.write(f"I[{step}], "
+                       f"E[{agent.epsilon: .2f}], "
+                       f"S[{score: .2f}], "
+                       f"L[{loss:.2f}], "
+                       f"LR[{opt.param_groups[0]['lr']}]")
 
 
 def _init_graphing():

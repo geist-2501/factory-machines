@@ -50,7 +50,7 @@ class OrderWorldMap:
             for i2, c2 in enumerate(depots):
                 if i1 == i2:
                     continue
-                routes[i1, i2] = self._euclidean_distance(c1, c2)
+                routes[i1, i2] = self._manhattan_distance(c1, c2)
 
         return n_depots, routes
 
@@ -58,6 +58,10 @@ class OrderWorldMap:
     def _euclidean_distance(c1: Coord, c2: Coord) -> float:
         dist = math.sqrt((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2)
         return round(dist, 1)
+
+    @staticmethod
+    def _manhattan_distance(c1: Coord, c2: Coord) -> float:
+        return abs(c1[0] - c2[0]) + abs(c1[1] - c2[1])
 
 
 class OrderWorldBasic(gym.Env):
@@ -95,7 +99,7 @@ class OrderWorldBasic(gym.Env):
     _travel_punishment = -0.1
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
     _item_pickup_reward = 1
-    _item_pickup_punishment = -0.5
+    _item_pickup_punishment = -2
     _reward_per_order = 10  # The amount of reward for dropping off a needed item.
 
     def __init__(
@@ -211,11 +215,14 @@ class OrderWorldBasic(gym.Env):
 
         self.screen.fill((255, 255, 255))
 
+        distances = [int(self._map.routes[self._current_depot, other_depot]) for other_depot in range(self._n_depots)]
+
         lines = [
             "   |" + ' '.join(["vvv" if i == self._current_depot else "   " for i in range(self._n_depots)]),
             "   |" + ' '.join([f"{f'D{i}':>3}" for i in range(self._n_depots - 1)]) + " OUT",
             "DEP|" + self._add_table_padding(self._get_depot_queues()),
             "INV|" + self._add_table_padding(self._agent_inv),
+            "DST|" + self._add_table_padding(distances),
             "---|" + '-'.join([f"---" for i in range(self._n_depots - 1)]) + "----",
         ]
 

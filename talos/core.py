@@ -165,3 +165,30 @@ def evaluate_agent(
         total_infos_mean[info] = np.mean(history).item()
 
     return np.mean(total_ep_rewards).item(), total_infos_mean
+
+
+def create_save_callback(id: str, config: Dict, used_wrappers: str, env_name: str, env_args: Dict) -> Callable:
+    def callback(agent_data: Any, training_artifacts: Dict, step: int, prefix: str = None):
+        talfile = TalFile(
+            id=id,
+            agent_data=agent_data,
+            training_artifacts=training_artifacts,
+            config=config,
+            used_wrappers=used_wrappers,
+            env_name=env_name,
+            env_args=env_args
+        )
+        path_meta = "map-" + str(env_args["map_id"]) if "map_id" in env_args else "no-meta"
+        filename_parts = [
+            "autosaved",
+            id,
+            env_name,
+            path_meta,
+            step,
+            ".tal"
+        ]
+        if prefix:
+            filename_parts.insert(1, prefix)
+        talfile.write('-'.join(filename_parts))
+
+    return callback
