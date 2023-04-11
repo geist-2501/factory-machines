@@ -17,7 +17,8 @@ class OrderWorldMap:
 
     def __init__(self, layout: List[str], p: List[float] = None) -> None:
         # Extract map depots and the lengths to each depot.
-        self.n_depots, self.routes = self._get_layout_info(layout)
+        self._layout = layout
+        self.n_depots, self.routes, self._depot_coords = self._get_layout_info(layout)
 
         if p is None:
             p = np.ones(self.n_depots - 1)
@@ -25,7 +26,7 @@ class OrderWorldMap:
         assert len(p) == self.n_depots - 1, "Must have a probability for each depot!"
         self.p = p
 
-    def _get_layout_info(self, layout: List[str]) -> Tuple[int, np.ndarray]:
+    def _get_layout_info(self, layout: List[str]) -> Tuple[int, np.ndarray, List[Coord]]:
         depots: List[Coord] = []
         output_depot: Optional[Coord] = None
         for y in range(len(layout)):
@@ -52,7 +53,18 @@ class OrderWorldMap:
                     continue
                 routes[i1, i2] = self._manhattan_distance(c1, c2)
 
-        return n_depots, routes
+        return n_depots, routes, depots
+
+    def render(self, current_depot_index):
+        render = [*self._layout]
+        agent_coord = self._depot_coords[current_depot_index]
+
+        line_to_replace = list(render[agent_coord[1]])
+        line_to_replace[agent_coord[0]] = "A"
+        render[agent_coord[1]] = ''.join(line_to_replace)
+
+        return render
+
 
     @staticmethod
     def _euclidean_distance(c1: Coord, c2: Coord) -> float:
@@ -96,7 +108,7 @@ class OrderWorldBasic(gym.Env):
     _agent_cap = 10
 
     # Rewards.
-    _travel_punishment = -0.1
+    _travel_punishment = -0.5
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
     _item_pickup_reward = 1
     _item_pickup_punishment = -2
@@ -200,7 +212,7 @@ class OrderWorldBasic(gym.Env):
 
         font_width, font_height = font.size("GAP" + " SSS" * self._n_depots)
         screen_width = font_width + padding * 2
-        screen_height = font_height * 10 + padding * 2
+        screen_height = font_height * (10 + 6 + len(self._map.render(0))) + padding * 2
 
         pygame.init()
         if self.screen is None:
@@ -215,9 +227,12 @@ class OrderWorldBasic(gym.Env):
 
         self.screen.fill((255, 255, 255))
 
+        map_lines = self._map.render(self._current_depot)
+
         distances = [int(self._map.routes[self._current_depot, other_depot]) for other_depot in range(self._n_depots)]
 
         lines = [
+            *map_lines,
             "   |" + ' '.join(["vvv" if i == self._current_depot else "   " for i in range(self._n_depots)]),
             "   |" + ' '.join([f"{f'D{i}':>3}" for i in range(self._n_depots - 1)]) + " OUT",
             "DEP|" + self._add_table_padding(self._get_depot_queues()),

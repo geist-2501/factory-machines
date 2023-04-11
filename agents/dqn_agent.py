@@ -255,6 +255,7 @@ def dqn_training_wrapper(
         agent: DQNAgent,
         dqn_config: configparser.SectionProxy,
         artifacts: Dict,
+        save_callback
 ):
     train_dqn_agent(
         env_factory=env_factory,

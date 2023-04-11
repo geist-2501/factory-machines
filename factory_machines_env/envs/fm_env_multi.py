@@ -13,8 +13,8 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
     _reward_per_order = 10  # The amount of reward for a fulfilled order.
     _item_pickup_reward = 1  # The amount of reward for picking up a needed item.
-    _item_pickup_punishment = -1  # The amount of reward for picking up an item it shouldn't.
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
+    _item_pickup_punishment = -2  # The amount of reward for picking up an item it shouldn't.
     _collision_punishment = -1
 
     _age_bands = 3  # The number of stages of 'oldness'.
@@ -127,7 +127,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             if sum(new_order) == 0:
                 # Order is complete!
                 order_age = self._timestep - order_t
-                reward += self._reward_per_order  # + self._sample_age_reward(order_age)
+                reward += self._reward_per_order + self._sample_age_reward(order_age)
 
         # Remove complete orders.
         self._open_orders[:] = [order for order in self._open_orders if sum(order[1]) != 0]

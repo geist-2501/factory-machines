@@ -559,6 +559,7 @@ def hdqn_training_wrapper(
         agent: HDQNAgent,
         dqn_config: configparser.SectionProxy,
         artifacts: Dict,
+        save_callback
 ):
     HDQNTrainingWrapper(
         env_factory,

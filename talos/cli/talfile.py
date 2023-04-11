@@ -173,7 +173,7 @@ def compare(
             agent, _ = create_agent(agent_env_factory, talfile.id)
             agent.load(talfile.agent_data)
             loaded_agents.append({
-                "agent_name": talfile.id,
+                "agent_name": f"{agent_talfile} ({talfile.id})",
                 "agent": agent,
                 "env_name": talfile.env_name,
                 "env_factory": agent_env_factory
