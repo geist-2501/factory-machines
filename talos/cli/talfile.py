@@ -2,9 +2,7 @@ from typing import List, Optional
 
 import typer
 from gym.wrappers import RecordVideo
-from matplotlib import pyplot as plt
 from rich import print
-from scipy.ndimage import uniform_filter1d
 
 from talos.cli.cli_utils import _convert_to_key_value_list
 from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent
