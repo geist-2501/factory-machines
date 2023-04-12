@@ -8,6 +8,7 @@ from gym import spaces
 from gym.core import RenderFrame, ActType, ObsType
 
 from factory_machines.envs.pygame_utils import History
+from factory_machines.envs.route_tracer import RouteTracer
 from factory_machines.envs.warehouse import Map
 
 
@@ -88,6 +89,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         'text': (10, 10, 10),
         'agent': (43, 79, 255),
         'agent-light': (7, 35, 176),
+        "route": (255, 166, 166),
+        "black": (0, 0, 0)
     }
 
     _item_pickup_reward = 1
@@ -154,6 +157,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         # Used for human friendly rendering.
         self.screen = None
         self.clock = None
+        self.route_tracer = RouteTracer()
 
         # Stats.
         self._dist_travelled = 0
@@ -199,6 +203,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
 
         self._timestep = 0
         self._dist_travelled = 0
+        self.route_tracer = RouteTracer(k=20)
+        self.route_tracer.trace(self._agent_loc)
 
         return obs, {}
 
@@ -236,12 +242,15 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             "distance": self._dist_travelled,
         }
 
+        self.route_tracer.trace(self._agent_loc, action == self.grab)
+
         if self.render_mode == "human":
             self.render()
 
         if self._verbose:
             print(f"Reward: {reward}")
             print(obs)
+
 
         return obs, reward, False, False, info
 
@@ -317,6 +326,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
                             (cell_size, cell_size)
                         )
                     )
+
+        self.route_tracer.render(self.screen, cell_size, self.colors["black"], self.colors["route"])
 
         # Draw agent.
         pygame.draw.circle(
