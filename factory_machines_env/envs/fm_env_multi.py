@@ -11,12 +11,11 @@ from factory_machines_env.envs.pygame_utils import draw_lines
 
 class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
-    _age_reward_decay = 40  # How much of the extra reward is given for late order fulfilment.
-    _age_reward_max = 5  # The maximum bonus given for a quickly completed order.
     _reward_per_order = 10  # The amount of reward for a fulfilled order.
-    _item_pickup_reward = 0.5  # The amount of reward for picking up a needed item.
-    _item_pickup_punishment = -0.5  # The amount of reward for picking up an item it shouldn't.
+    _item_pickup_reward = 1  # The amount of reward for picking up a needed item.
     _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
+    _item_pickup_punishment = -2  # The amount of reward for picking up an item it shouldn't.
+    _collision_punishment = -1
 
     _age_bands = 3  # The number of stages of 'oldness'.
     _age_max_timesteps = 100  # The amount of timesteps that can elapse before an order is considered old.

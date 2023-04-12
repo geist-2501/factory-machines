@@ -32,6 +32,7 @@ def view(path: str):
     print(f"[bold white]Agent name[/]:       {talfile.id}")
     print(f"[bold white]Environment used[/]: {talfile.env_name}")
     print(f"[bold white]Wrapper used[/]:     {talfile.used_wrappers}")
+    print(f"[bold white]Env args[/]:         {talfile.env_args}")
     print("[bold white]Configuration used[/]:")
     print(talfile.config)
 
@@ -172,13 +173,13 @@ def compare(
             agent, _ = create_agent(agent_env_factory, talfile.id)
             agent.load(talfile.agent_data)
             loaded_agents.append({
-                "agent_name": talfile.id,
+                "agent_name": f"{agent_talfile} ({talfile.id})",
                 "agent": agent,
                 "env_name": talfile.env_name,
                 "env_factory": agent_env_factory
             })
-            extra_info = f"Uses {talfile.env_name}" \
-                         + f" with wrapper {talfile.used_wrappers}." if talfile.used_wrappers else "."
+            extra_info = f"Uses {talfile.env_name}"
+            extra_info += f" with wrapper {talfile.used_wrappers}." if talfile.used_wrappers else "."
             print(f"[bold green]success![/] {extra_info}")
         except RuntimeError as ex:
             print("[bold red]failed![/] Couldn't load .tal file. " + str(ex))
