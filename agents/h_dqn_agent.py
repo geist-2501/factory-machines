@@ -146,6 +146,8 @@ class HDQNAgent(Agent, ABC):
             opt,
             max_grad_norm
     ):
+        opt.zero_grad()
+
         (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
 
         loss = self.get_loss(s, a, r, s_dash, is_done, net, net_fixed)
@@ -153,7 +155,6 @@ class HDQNAgent(Agent, ABC):
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
         opt.step()
-        opt.zero_grad()
 
         return loss, grad_norm
 
@@ -236,8 +237,7 @@ class HDQNTrainingWrapper:
         self.opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
         self.opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
 
-        # TODO Incorporate.
-        self.q1_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt1, self.pretrain_steps)
+        self.q1_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt1, self.train_steps)
         self.q2_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt2, self.train_steps)
 
         # Init all epsilons.
@@ -275,6 +275,8 @@ class HDQNTrainingWrapper:
         self.q1_mean_reward_history = []
         self.q2_mean_reward_history = []
         self.q2_action_length_history = []
+        self.q1_lr_history = []
+        self.q2_lr_history = []
         self.picked_goals = np.zeros(agent.n_goals)
         self.n_goal_steps = np.zeros(agent.n_goals)
         self.epsilon_history = np.empty(shape=(0, agent.n_goals + 1))  # +1 for Q2's epsilon.
@@ -397,6 +399,8 @@ class HDQNTrainingWrapper:
                         max_grad_norm=self.max_grad_norm
                     )
 
+                    self.q1_lr_sched.step()
+
                     if timekeeper.get_q1_steps() % self.net_update_freq == 0:
                         self.agent.update_q1_fixed()
 
@@ -428,6 +432,8 @@ class HDQNTrainingWrapper:
                         max_grad_norm=self.max_grad_norm
                     )
 
+                    self.q2_lr_sched.step()
+
                     if timekeeper.get_q2_steps() % self.net_update_freq == 0:
                         self.agent.update_q2_fixed()
 
@@ -444,6 +450,8 @@ class HDQNTrainingWrapper:
                 )
 
             if done:
+                if timekeeper:
+                    timekeeper.step_episode()
                 return
 
         if learn and goal:
@@ -478,12 +486,13 @@ class HDQNTrainingWrapper:
                 self.q2_loss_history.append(q2_loss.data.cpu().numpy())
                 self.q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
 
+            self.q1_lr_history.append(self.q1_lr_sched.get_last_lr())
+            self.q2_lr_history.append(self.q2_lr_sched.get_last_lr())
+
         if relevant_steps % self.eval_freq == 0:
             # Perform an evaluation.
             self.evaluate_and_graph(seed=timekeeper.get_q1_steps(), timekeeper=timekeeper)
 
-        # if relevant_steps % self.save_freq == 0:
-        #     self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps())
 
     @staticmethod
     def evaluate_hdqn(
@@ -533,13 +542,13 @@ class HDQNTrainingWrapper:
 
         high_score, _ = self.best_agent_score
         if extrinsic_score != np.nan and extrinsic_score > self.best_agent_score[0]:
-            tqdm.write(f"New personal best set: {high_score:.2f} -> {extrinsic_score:.2f}")
+            tqdm.write(f"!! New personal best set: {high_score:.2f} -> {extrinsic_score:.2f} !!")
             self.best_agent_score = extrinsic_score, self.agent.save()
             self.n_since_last_peak = 0
         else:
             self.n_since_last_peak += 1
             if self.n_since_last_peak == self.n_save_after_peak:
-                tqdm.write("Saving snapshot...")
+                tqdm.write("!! Saving snapshot... !!")
                 self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps(), f"peak-{extrinsic_score}")
 
         _update_graphs(
@@ -547,7 +556,8 @@ class HDQNTrainingWrapper:
             (self.q1_mean_reward_history, self.q2_mean_reward_history),
             (self.q1_loss_history, self.q2_loss_history),
             (self.q1_grad_norm_history, self.q2_grad_norm_history),
-            self.epsilon_history
+            self.epsilon_history,
+            (self.q1_lr_history, self.q2_lr_history)
         )
 
         self.artifacts["loss"] = (self.q1_loss_history, self.q2_loss_history)
@@ -561,15 +571,17 @@ class HDQNTrainingWrapper:
 
         q1_loss = np.nanmean(self.q1_loss_history[-10:]).item()
         q2_loss = np.nanmean(self.q2_loss_history[-10:]).item()
-        tqdm.write(f"T[Q1: {timekeeper.get_q1_steps()}, Q2: {timekeeper.get_q2_steps()}], "
+        tqdm.write(f"T[Q1: {timekeeper.get_q1_steps()}, "
+                   f"Q2: {timekeeper.get_q2_steps()}, "
+                   f"Env: {timekeeper.get_env_steps()}, "
+                   f"Eps: {timekeeper.get_episode_steps()}], "
                    f"R[Q1: {intrinsic_score:.2f}, Q2: {extrinsic_score:.2f}], "
                    f"L[Q1: {q1_loss:.3f}, Q2: {q2_loss:.3f}], "
                    f"K[{k_end}], "
                    f"SR[{success_rates}], "
                    f"NG[{num_goals_completed:.2f}], "
                    f"Q2-Len[{np.mean(self.q2_action_length_history[-10:])}], "
-                   f"D1[{self.agent.d1.contents}], "
-                   f"G[{self.picked_goals}]")
+                   f"D1[{self.agent.d1.contents}]")
 
 
 def hdqn_training_wrapper(
@@ -606,34 +618,36 @@ def _init_graphing():
         gs = GridSpec(3, 3, figure=fig)
         ax_reward = fig.add_subplot(gs[0, :-1])
         ax_epsilon = fig.add_subplot(gs[0, -1:])
+        ax_loss = ax_epsilon.twinx()
         ax_q1_loss = fig.add_subplot(gs[1, :-1])
         ax_q1_grad_norm = fig.add_subplot(gs[1, -1:])
         ax_q2_loss = fig.add_subplot(gs[2, :-1])
         ax_q2_grad_norm = fig.add_subplot(gs[2, -1:])
-        axs = (ax_reward, ax_epsilon, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm)
+        axs = (ax_reward, ax_epsilon, ax_loss, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm)
     else:
         fig, axs = None, None
 
     return axs
 
 
-def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history):
+def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history, lr_history):
     if can_graph() is False:
         return
 
     plt.figure(1)
 
-    ax_reward, ax_epsilon, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm = axs
+    ax_reward, ax_epsilon, ax_lr, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm = axs
 
     ax_reward.cla()
     ax_epsilon.cla()
+    ax_lr.cla()
     ax_q1_loss.cla()
     ax_q1_grad_norm.cla()
     ax_q2_loss.cla()
     ax_q2_grad_norm.cla()
 
     ax_reward.set_title("Mean Reward")
-    ax_epsilon.set_title("Epsilon")
+    ax_epsilon.set_title("Epsilon & LR")
     ax_q1_loss.set_title("Loss Q1")
     ax_q1_grad_norm.set_title("Grad Norm Q1")
     ax_q2_loss.set_title("Loss Q2")
@@ -650,6 +664,10 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
         label = "Q1-Out" if i == epsilon_history.shape[1] - 1 else label
         ax_epsilon.plot(epsilon_history[:, i], label=label)
     ax_epsilon.legend()
+
+    ax_lr.plot(lr_history[0], label="Q1 LR", dashes=[1, 1])
+    ax_lr.plot(lr_history[1], label="Q2 LR", dashes=[1, 1])
+    ax_lr.legend()
 
     ax_q1_grad_norm.plot(smoothen(grad_norm_history[0]))
     ax_q2_grad_norm.plot(smoothen(grad_norm_history[1]))
