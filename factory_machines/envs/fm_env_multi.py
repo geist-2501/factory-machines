@@ -83,8 +83,6 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             "orders per minute": self._get_num_completed_orders() / self._timestep
         }
 
-        print(reward)
-
         return obs, reward, terminated, False, info
 
     def get_info(self):
