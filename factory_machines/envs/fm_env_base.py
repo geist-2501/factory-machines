@@ -97,6 +97,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     _item_pickup_punishment = -0.5
     _item_dropoff_reward = 1
     _collision_punishment = -0.1
+    _timestep_punishment = -0.1
 
     up, left, down, right, grab = range(5)
 
@@ -234,7 +235,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
         if np.array_equal(self._agent_loc, self._output_loc):
             drop_off_reward = self._depot_drop_off()
 
-        reward = action_reward + drop_off_reward - 0.1
+        reward = action_reward + drop_off_reward + self._timestep_punishment
 
         obs = self._get_obs()
         info = {

@@ -2,7 +2,7 @@ import configparser
 import math
 from abc import ABC, abstractmethod
 from operator import itemgetter
-from typing import Dict, Callable, Tuple, Any, TypeVar, List
+from typing import Dict, Callable, Tuple, Any, TypeVar, List, Optional
 
 import gym
 import matplotlib.pyplot as plt
@@ -236,7 +236,7 @@ class HDQNTrainingWrapper:
         self.opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
         self.opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
 
-        self.q1_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt1, self.train_steps)
+        self.q1_lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt1, 'max')
         self.q2_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt2, self.train_steps)
 
         # Init all epsilons.
@@ -318,7 +318,7 @@ class HDQNTrainingWrapper:
         with trange(self.train_steps, desc="Q2 Steps") as q2_progress_bar:
             with trange(self.train_steps, desc="Q1 Steps") as q1_progress_bar:
                 q2_done = timekeeper.get_q2_steps() >= self.train_steps
-                q1_done = timekeeper.get_q1_steps() >= self.train_steps or type(timekeeper) is SerialTimekeeper
+                q1_done = timekeeper.get_q1_steps() >= self.train_steps
                 while not q2_done or not q1_done:
 
                     self.play_episode(env, timekeeper=timekeeper, learn=True, show_progress=True)
@@ -398,8 +398,6 @@ class HDQNTrainingWrapper:
                         max_grad_norm=self.max_grad_norm
                     )
 
-                    self.q1_lr_sched.step()
-
                     if timekeeper.get_q1_steps() % self.net_update_freq == 0:
                         self.agent.update_q1_fixed()
 
@@ -442,11 +440,14 @@ class HDQNTrainingWrapper:
             obs = next_obs
 
             if learn:
-                self.record_statistics(
+                score = self.record_statistics(
                     timekeeper,
                     (q1_loss, q2_loss),
                     (q1_grad_norm, q2_grad_norm),
                 )
+
+                if score is not None:
+                    self.q1_lr_sched.step(score)
 
             if done:
                 if timekeeper:
@@ -465,7 +466,7 @@ class HDQNTrainingWrapper:
             timekeeper: TimeKeeper,
             loss,
             grad_norm
-    ):
+    ) -> Optional[float]:
         relevant_steps = timekeeper.get_env_steps()
         if relevant_steps % self.gather_freq == 0:
             self.epsilon_history = np.append(
@@ -490,8 +491,7 @@ class HDQNTrainingWrapper:
 
         if relevant_steps % self.eval_freq == 0:
             # Perform an evaluation.
-            self.evaluate_and_graph(seed=timekeeper.get_q1_steps(), timekeeper=timekeeper)
-
+            return self.evaluate_and_graph(seed=timekeeper.get_q1_steps(), timekeeper=timekeeper)
 
     @staticmethod
     def evaluate_hdqn(
@@ -527,7 +527,7 @@ class HDQNTrainingWrapper:
             intrinsic_rewards.append(total_intrinsic_reward / max(1, num_goals_completed))
         return np.mean(extrinsic_rewards).item(), np.mean(intrinsic_rewards).item(), np.mean(goals_completed).item()
 
-    def evaluate_and_graph(self, seed, timekeeper: TimeKeeper):
+    def evaluate_and_graph(self, seed, timekeeper: TimeKeeper) -> float:
 
         extrinsic_score, intrinsic_score, num_goals_completed = self.evaluate_hdqn(
             self.env_factory(seed),
@@ -560,9 +560,10 @@ class HDQNTrainingWrapper:
         )
 
         self.artifacts["loss"] = (self.q1_loss_history, self.q2_loss_history)
-        self.artifacts["grad_norm"] = (self.q1_loss_history, self.q1_loss_history)
+        self.artifacts["grad_norm"] = (self.q1_loss_history, self.q2_loss_history)
         self.artifacts["mean_reward"] = (self.q1_mean_reward_history, self.q2_mean_reward_history)
         self.artifacts["epsilon"] = self.epsilon_history
+        self.artifacts["lr"] = (self.q1_lr_history, self.q2_lr_history)
 
         success_rates = [f"{eps1.get_success_rate():.2f}" for eps1 in self.epsilon1_decay]
 
@@ -581,6 +582,8 @@ class HDQNTrainingWrapper:
                    f"NG[{num_goals_completed:.2f}], "
                    f"Q2-Len[{np.mean(self.q2_action_length_history[-10:])}], "
                    f"D1[{self.agent.d1.contents}]")
+
+        return extrinsic_score
 
 
 def hdqn_training_wrapper(
