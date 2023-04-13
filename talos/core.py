@@ -19,16 +19,16 @@ def play_agent(
         agent: Agent,
         env: gym.Env,
         max_episode_steps=1000,
-        wait_time: float = None
+        wait_time: float = None,
+        wait_for_keypress: bool = False
 ):
     obs, _ = env.reset()
     env.render()
     extra_state = None
     reward_history = []
-    info_history = []
     for _ in range(max_episode_steps):
         action, extra_state = agent.get_action(obs, extra_state)
-        next_obs, r, done, _, info = env.step(action)
+        next_obs, r, done, _, _ = env.step(action)
 
         # Some agents require extra processing (looking at you, h-DQN).
         extra_state = agent.post_step(obs, action, next_obs, extra_state)
@@ -36,7 +36,6 @@ def play_agent(
         obs = next_obs
 
         reward_history.append(r)
-        info_history.append(info)
 
         if env.render_mode != "human":
             if env.render_mode == "rgb_array":
@@ -45,14 +44,18 @@ def play_agent(
             else:
                 env.render()
 
-        if wait_time:
+        print(f"Act [{action}] -> [{r}]")
+
+        if wait_for_keypress:
+            input()
+        elif wait_time:
             time.sleep(wait_time)
 
         if done:
             break
 
     env.close()
-    return reward_history, info_history
+    return reward_history
 
 
 def evaluate_agents(loaded_agents: List[Dict], max_episode_timesteps=1000, n_episodes=3):

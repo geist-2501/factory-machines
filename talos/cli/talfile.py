@@ -74,6 +74,11 @@ def replay(
         opt_target_fps: int = typer.Option(
             30,
             "--fps"
+        ),
+        opt_wait_for_keypress: bool = typer.Option(
+            False,
+            "--wait-for-keypress",
+            "-k"
         )
 ):
     """Play the agent in the environment it was trained in."""
@@ -115,7 +120,8 @@ def replay(
 
     try:
         for _ in range(opt_num_eps):
-            play_agent(agent, env, wait_time=1/opt_target_fps)
+            reward_history = play_agent(agent, env, wait_time=1/opt_target_fps, wait_for_keypress=opt_wait_for_keypress)
+            print(f"Final score: {sum(reward_history):.2f}")
     except KeyboardInterrupt:
         env.close()
         raise typer.Abort()

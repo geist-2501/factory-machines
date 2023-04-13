@@ -607,7 +607,8 @@ def hdqn_graphing_wrapper(
         mean_reward_history=artifacts["mean_reward"],
         loss_history=artifacts["loss"],
         grad_norm_history=artifacts["grad_norm"],
-        epsilon_history=artifacts["epsilon"]
+        epsilon_history=artifacts["epsilon"],
+        lr_history=artifacts["lr"]
     )
 
 
