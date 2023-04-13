@@ -3,6 +3,7 @@ from typing import Dict, List
 
 import gym
 import numpy as np
+import torch.optim.lr_scheduler
 from scipy.ndimage.filters import uniform_filter1d
 
 from talos import Agent
@@ -165,3 +166,8 @@ def flatten(obs: Dict) -> List:
 def parse_int_list(raw: str) -> List[int]:
     parts = raw.split(",")
     return list(map(lambda part: int(part), parts))
+
+
+class BetterReduceLROnPlateau(torch.optim.lr_scheduler.ReduceLROnPlateau):
+    def get_last_lr(self):
+        return self.optimizer.param_groups[0]['lr']  # ew.

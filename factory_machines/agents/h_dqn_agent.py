@@ -16,7 +16,7 @@ from factory_machines.agents.dqn import DQN, compute_td_loss
 from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWithStats
 from factory_machines.agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from factory_machines.agents.utils import can_graph, smoothen, parse_int_list, StaticLinearDecay, \
-    SuccessRateWithTimeLimitDecay
+    SuccessRateWithTimeLimitDecay, BetterReduceLROnPlateau
 from talos import Agent, ExtraState, EnvFactory, SaveCallback
 
 DictObsType = TypeVar("DictObsType")
@@ -236,7 +236,7 @@ class HDQNTrainingWrapper:
         self.opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
         self.opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
 
-        self.q1_lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(self.opt1, 'max')
+        self.q1_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt1, self.pretrain_steps + self.train_steps)
         self.q2_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt2, self.train_steps)
 
         # Init all epsilons.
@@ -317,10 +317,7 @@ class HDQNTrainingWrapper:
             timekeeper.set_k_catch_up(self.k_catch_up)
         with trange(self.train_steps, desc="Q2 Steps") as q2_progress_bar:
             with trange(self.train_steps, desc="Q1 Steps") as q1_progress_bar:
-                q2_done = timekeeper.get_q2_steps() >= self.train_steps
-                q1_done = timekeeper.get_q1_steps() >= self.train_steps
-                while not q2_done or not q1_done:
-
+                while timekeeper.get_q2_steps() < self.train_steps or timekeeper.get_q1_steps() < self.train_steps:
                     self.play_episode(env, timekeeper=timekeeper, learn=True, show_progress=True)
 
                     q2_progress_bar.update(timekeeper.get_q2_steps() - q2_progress_bar.n)
@@ -398,6 +395,8 @@ class HDQNTrainingWrapper:
                         max_grad_norm=self.max_grad_norm
                     )
 
+                    self.q1_lr_sched.step()
+
                     if timekeeper.get_q1_steps() % self.net_update_freq == 0:
                         self.agent.update_q1_fixed()
 
@@ -445,9 +444,6 @@ class HDQNTrainingWrapper:
                     (q1_loss, q2_loss),
                     (q1_grad_norm, q2_grad_norm),
                 )
-
-                if score is not None:
-                    self.q1_lr_sched.step(score)
 
             if done:
                 if timekeeper:
@@ -540,15 +536,16 @@ class HDQNTrainingWrapper:
         self.q1_mean_reward_history.append(intrinsic_score)
 
         high_score, _ = self.best_agent_score
-        if extrinsic_score != np.nan and extrinsic_score > self.best_agent_score[0]:
-            tqdm.write(f"!! New personal best set: {high_score:.2f} -> {extrinsic_score:.2f} !!")
-            self.best_agent_score = extrinsic_score, self.agent.save()
-            self.n_since_last_peak = 0
-        else:
-            self.n_since_last_peak += 1
-            if self.n_since_last_peak == self.n_save_after_peak:
-                tqdm.write("!! Saving snapshot... !!")
-                self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps(), f"peak-{extrinsic_score}")
+        if extrinsic_score != np.nan:
+            if extrinsic_score > self.best_agent_score[0]:
+                tqdm.write(f"!! New personal best set: {high_score:.2f} -> {extrinsic_score:.2f} !!")
+                self.best_agent_score = extrinsic_score, self.agent.save()
+                self.n_since_last_peak = 0
+            else:
+                self.n_since_last_peak += 1
+                if self.n_since_last_peak == self.n_save_after_peak:
+                    tqdm.write("!! Saving snapshot... !!")
+                    self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps(), f"peak-{extrinsic_score}")
 
         _update_graphs(
             self.axs,
