@@ -19,6 +19,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     _timestep_punishment = -0.5
 
     _age_bands = 25  # The number of stages of 'oldness'.
+    _max_age_reward = 10  # The max reward that can be gained from an early order completion.
     _age_max_timesteps = 100  # The amount of timesteps that can elapse before an order is considered old.
 
     def __init__(
@@ -81,6 +82,8 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             **info,
             "orders per minute": self._get_num_completed_orders() / self._timestep
         }
+
+        print(reward)
 
         return obs, reward, terminated, False, info
 
@@ -178,8 +181,8 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
     def _sample_age_reward(self, age: int) -> float:
         compressed_age = self._get_age(age)
-        reward = self._age_bands - compressed_age
-        return reward
+        reward_ratio = (self._age_bands - compressed_age) / self._age_bands
+        return reward_ratio * self._max_age_reward
 
     def _get_num_completed_orders(self):
         return self._total_num_orders - (self._num_orders_pending + len(self._open_orders))
