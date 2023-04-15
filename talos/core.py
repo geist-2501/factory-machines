@@ -196,3 +196,26 @@ def create_save_callback(id: str, config: Dict, used_wrappers: str, env_name: st
         talfile.write('-'.join(filename_parts))
 
     return callback
+
+
+def graph_eval_results(title: str, agent_names: List[str], rewards: List[float], extra_infos: List[Dict]):
+    num_plots = len(extra_infos[0]) + 1
+    fig, axs = plt.subplots(1, num_plots, figsize=(num_plots*3, 3))
+
+    swizzled_infos = defaultdict(lambda: [])
+    swizzled_infos["reward"] = rewards
+    for extra_info in extra_infos:
+        for k, v in extra_info.items():
+            swizzled_infos[k].append(v)
+
+    cmap = plt.get_cmap("tab10")
+    colours = [cmap(i) for i in range(len(agent_names))]
+
+    for ax, info in zip(axs, swizzled_infos.items()):
+        metric, values = info
+        ax.bar(agent_names, values, color=colours, label=agent_names)
+        ax.set_title(metric)
+        ax.legend()
+        ax.set_xticklabels(agent_names, rotation=30, ha='right')
+
+    plt.show()
