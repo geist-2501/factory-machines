@@ -18,8 +18,8 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
     _collision_punishment = -1
     _timestep_punishment = -0.5
 
-    _age_bands = 25  # The number of stages of 'oldness'.
-    _max_age_reward = 10  # The max reward that can be gained from an early order completion.
+    _age_bands = 3  # The number of stages of 'oldness'.
+    _max_age_reward = 3  # The max reward that can be gained from an early order completion.
     _age_max_timesteps = 100  # The amount of timesteps that can elapse before an order is considered old.
 
     def __init__(
