@@ -67,6 +67,13 @@ class DQN(nn.Module):
             should_explore = np.random.choice([0, 1], batch_size, p=[1 - epsilon, epsilon])
             return np.where(should_explore, random_actions, best_actions)
 
+    def get_all_action_values(self, state: np.ndarray) -> np.ndarray:
+        """Get all the scores for each action from the given state."""
+        state = torch.tensor(state, device=self.device, dtype=torch.float32)
+        with torch.no_grad():
+            return np.array(self.forward(state).cpu())
+
+
     @staticmethod
     def _build_net(layers: List[int]) -> nn.Sequential:
         net = nn.Sequential()

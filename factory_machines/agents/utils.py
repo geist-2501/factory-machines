@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Dict, List
+from typing import Dict, List, Callable
 
 import gym
 import numpy as np
@@ -171,3 +171,12 @@ def parse_int_list(raw: str) -> List[int]:
 class BetterReduceLROnPlateau(torch.optim.lr_scheduler.ReduceLROnPlateau):
     def get_last_lr(self):
         return self.optimizer.param_groups[0]['lr']  # ew.
+
+
+def label_values(name_func: Callable[[int], str], values: np.ndarray) -> List[str]:
+    out = []
+    names = [name_func(action) for action in range(len(values))]
+    for name, value in zip(names, values):
+        out.append(f"{name}: {value:.2f}")
+
+    return out

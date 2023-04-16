@@ -16,7 +16,7 @@ from factory_machines.agents.dqn import DQN, compute_td_loss
 from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWithStats
 from factory_machines.agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from factory_machines.agents.utils import can_graph, smoothen, parse_int_list, StaticLinearDecay, \
-    SuccessRateWithTimeLimitDecay, BetterReduceLROnPlateau
+    SuccessRateWithTimeLimitDecay, label_values
 from talos import Agent, ExtraState, EnvFactory, SaveCallback
 
 DictObsType = TypeVar("DictObsType")
@@ -28,6 +28,8 @@ class HDQNAgent(Agent, ABC):
     """
     Hierarchical Deep Q-Network agent.
     """
+
+    debug = False
 
     def __init__(
             self,
@@ -88,38 +90,38 @@ class HDQNAgent(Agent, ABC):
     def goal_satisfied(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> bool:
         raise NotImplementedError
 
-    @abstractmethod
-    def to_q1(self, obs: DictObsType, goal: ActType) -> FlatObsType:
-        """Process an observation before being fed to Q1."""
-        return [*obs, *self.onehot(goal, self.n_goals)]
-
-    @abstractmethod
-    def to_q2(self, obs: DictObsType) -> FlatObsType:
-        """Process an observation before being fed to Q2."""
-        return obs
-
     def get_action(self, obs: DictObsType, extra_state=None, only_q1=False) -> Tuple[ActType, Any]:
         """Get the optimal action given a state."""
 
         goal = extra_state  # Treat the extra state we're given as the goal.
         if goal is None:
+            meta_controller_obs = self.to_q2(obs)
             if only_q1:
                 goal = np.random.choice(self.n_goals)
             else:
                 # If no goal is given, get one from the meta-controller.
-                meta_controller_obs = self.to_q2(obs)
                 goal = self.get_epsilon(meta_controller_obs, epsilon=0, net=self.q2_net)
-            # print(f"Picked goal {goal}")
+
+            if self.debug:
+                print(f"Picked goal {self.goal_to_str(goal)}")
+                goal_values = self.q2_net.get_all_action_values(meta_controller_obs)
+                print(f"Current goal-values: {label_values(self.goal_to_str, goal_values) }")
+
         # Get an action from the controller, incorporating the goal.
         controller_obs = self.to_q1(obs, goal)
         action = self.get_epsilon(controller_obs, epsilon=0, net=self.q1_net)
+
+        if self.debug:
+            action_values = self.q1_net.get_all_action_values(controller_obs)
+            print(f"Current action-values: {label_values(self.action_to_str, action_values)}")
 
         return action, goal
 
     def post_step(self, obs, action, next_obs, extra_state: ExtraState = None) -> ExtraState:
         goal = extra_state
         if self.goal_satisfied(obs, action, next_obs, goal):
-            # print(f"Completed goal {goal}")
+            if self.debug:
+                print(f"Completed goal {self.goal_to_str(goal)}")
             goal = None
         return goal
 
@@ -198,9 +200,27 @@ class HDQNAgent(Agent, ABC):
         self.q2_net_fixed.set_hidden_layers(q2_hidden_layers)
         self.update_q2_fixed()
 
+    @abstractmethod
+    def to_q1(self, obs: DictObsType, goal: ActType) -> FlatObsType:
+        """Process an observation before being fed to Q1."""
+        return [*obs, *self.onehot(goal, self.n_goals)]
+
+    @abstractmethod
+    def to_q2(self, obs: DictObsType) -> FlatObsType:
+        """Process an observation before being fed to Q2."""
+        return obs
+
     @staticmethod
     def onehot(category, n_categories):
         return [1 if i == category else 0 for i in range(n_categories)]
+
+    @abstractmethod
+    def goal_to_str(self, goal: ActType) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def action_to_str(self, action: ActType) -> str:
+        raise NotImplementedError
 
 
 class HDQNTrainingWrapper:
@@ -415,7 +435,8 @@ class HDQNTrainingWrapper:
 
                 if learn and timekeeper.should_train_q1():
                     # Update the epsilon for the completed goal.
-                    self.agent.eps1[goal] = self.epsilon1_decay[goal].next(timekeeper.get_env_steps(), goal_satisfied, meta_t)
+                    self.agent.eps1[goal] = self.epsilon1_decay[goal].next(timekeeper.get_env_steps(), goal_satisfied,
+                                                                           meta_t)
 
                 if learn and timekeeper.should_train_q2():
                     timekeeper.step_q2()
@@ -545,7 +566,8 @@ class HDQNTrainingWrapper:
                 self.n_since_last_peak += 1
                 if self.n_since_last_peak == self.n_save_after_peak:
                     tqdm.write("!! Saving snapshot... !!")
-                    self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps(), f"peak-{extrinsic_score}")
+                    self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps(),
+                                       f"peak-{extrinsic_score}")
 
         _update_graphs(
             self.axs,

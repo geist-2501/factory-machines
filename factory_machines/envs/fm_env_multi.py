@@ -13,10 +13,11 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
     _reward_per_order = 10  # The amount of reward for a fulfilled order.
     _item_pickup_reward = 1  # The amount of reward for picking up a needed item.
-    _item_dropoff_reward = 1  # The amount of reward for dropping off a needed item.
+    _item_dropoff_reward = 0  # The amount of reward for dropping off a needed item.
     _item_pickup_punishment = -2  # The amount of reward for picking up an item it shouldn't.
     _collision_punishment = -1
     _timestep_punishment = -0.5
+    _episode_reward = 100
 
     _age_bands = 3  # The number of stages of 'oldness'.
     _max_age_reward = 3  # The max reward that can be gained from an early order completion.
@@ -76,7 +77,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             self._open_orders.append((self._timestep, order))
 
         terminated = self._num_orders_pending == 0 and len(self._open_orders) == 0
-        reward += 100 if terminated else 0
+        reward += self._episode_reward if terminated else 0
 
         info = {
             **info,

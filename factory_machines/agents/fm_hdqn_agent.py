@@ -8,6 +8,8 @@ class FactoryMachinesHDQNAgent(HDQNAgent):
 
     up, left, down, right, grab = range(5)
 
+    action_names = ["up", "left", "down", "right", "grab"]
+
     def __init__(self, obs: DictObsType, n_actions: int, device: str = 'cpu') -> None:
         # Depot locations is a flattened x,y list, so half it's size for the total number of locations,
         # and add one for the output location.
@@ -41,6 +43,15 @@ class FactoryMachinesHDQNAgent(HDQNAgent):
 
     def to_q2(self, obs: DictObsType) -> FlatObsType:
         return flatten(obs)  # TODO try with narrower state.
+
+    def goal_to_str(self, goal: ActType) -> str:
+        if goal == self.n_goals - 1:
+            return "OUT"
+        else:
+            return f"D{goal}"
+
+    def action_to_str(self, action: ActType) -> str:
+        return self.action_names[action]
 
     def _did_collide(self, local_obs, action) -> bool:
         return (action == self.up and local_obs[0, 1] == 1) \
