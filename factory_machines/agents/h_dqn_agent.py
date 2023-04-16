@@ -256,8 +256,8 @@ class HDQNTrainingWrapper:
         self.opt1 = torch.optim.NAdam(params=agent.q1_params(), lr=learning_rate)
         self.opt2 = torch.optim.NAdam(params=agent.q2_params(), lr=learning_rate)
 
-        self.q1_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt1, self.pretrain_steps + self.train_steps)
-        self.q2_lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt2, self.train_steps)
+        self.q1_lr_sched = torch.optim.lr_scheduler.PolynomialLR(self.opt1, self.pretrain_steps + self.train_steps)
+        self.q2_lr_sched = torch.optim.lr_scheduler.PolynomialLR(self.opt2, self.train_steps)
 
         # Init all epsilons.
         agent.eps1 = np.ones(agent.n_goals)
@@ -393,13 +393,14 @@ class HDQNTrainingWrapper:
             # Get intrinsic reward for the controller.
             int_r = self.agent.get_intrinsic_reward(obs, action, next_obs, goal)
 
+            goal_satisfied = self.agent.goal_satisfied(obs, action, next_obs, goal)
             self.n_goal_steps[goal] += 1
             self.agent.d1.add(
                 self.agent.to_q1(obs, goal),
                 action,
                 int_r,
                 self.agent.to_q1(next_obs, goal),
-                False
+                goal_satisfied
             )
 
             if learn:
@@ -420,7 +421,6 @@ class HDQNTrainingWrapper:
                     if timekeeper.get_q1_steps() % self.net_update_freq == 0:
                         self.agent.update_q1_fixed()
 
-            goal_satisfied = self.agent.goal_satisfied(obs, action, next_obs, goal)
             if goal_satisfied or done:
                 # End of the meta-action.
                 self.agent.d2.add(
@@ -435,8 +435,8 @@ class HDQNTrainingWrapper:
 
                 if learn and timekeeper.should_train_q1():
                     # Update the epsilon for the completed goal.
-                    self.agent.eps1[goal] = self.epsilon1_decay[goal].next(timekeeper.get_env_steps(), goal_satisfied,
-                                                                           meta_t)
+                    self.agent.eps1[goal] = self.epsilon1_decay[goal]\
+                        .next(timekeeper.get_env_steps(), goal_satisfied, meta_t)
 
                 if learn and timekeeper.should_train_q2():
                     timekeeper.step_q2()
@@ -460,7 +460,7 @@ class HDQNTrainingWrapper:
             obs = next_obs
 
             if learn:
-                score = self.record_statistics(
+                self.record_statistics(
                     timekeeper,
                     (q1_loss, q2_loss),
                     (q1_grad_norm, q2_grad_norm),
@@ -495,20 +495,26 @@ class HDQNTrainingWrapper:
             q1_loss, q2_loss = loss
             q1_grad_norm, q2_grad_norm = grad_norm
 
-            if q1_loss and q1_grad_norm:
+            if q1_loss is not None:
                 self.q1_loss_history.append(q1_loss.data.cpu().numpy())
                 self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
+            else:
+                self.q1_loss_history.append(np.nan)
+                self.q1_grad_norm_history.append(np.nan)
 
-            if q2_loss and q2_grad_norm:
+            if q2_loss is not None:
                 self.q2_loss_history.append(q2_loss.data.cpu().numpy())
                 self.q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
+            else:
+                self.q2_loss_history.append(np.nan)
+                self.q2_grad_norm_history.append(np.nan)
 
             self.q1_lr_history.append(self.q1_lr_sched.get_last_lr())
             self.q2_lr_history.append(self.q2_lr_sched.get_last_lr())
 
         if relevant_steps % self.eval_freq == 0:
             # Perform an evaluation.
-            return self.evaluate_and_graph(seed=timekeeper.get_q1_steps(), timekeeper=timekeeper)
+            return self.evaluate_and_graph(seed=timekeeper.get_env_steps(), timekeeper=timekeeper)
 
     @staticmethod
     def evaluate_hdqn(
