@@ -2,10 +2,11 @@ from typing import List, Optional
 
 import typer
 from gym.wrappers import RecordVideo
+from matplotlib import pyplot as plt
 from rich import print
 
 from talos.cli.cli_utils import _convert_to_key_value_list
-from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent
+from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent, graph_eval_results
 from talos.error import TalfileLoadError, AgentNotFound
 from talos.file import read_talfile
 
@@ -178,6 +179,7 @@ def compare(
             agent.load(talfile.agent_data)
             loaded_agents.append({
                 "agent_name": f"{agent_talfile} ({talfile.id})",
+                "agent_id": talfile.id,
                 "agent": agent,
                 "env_name": talfile.env_name,
                 "env_factory": agent_env_factory
@@ -206,4 +208,12 @@ def compare(
         for i, reward in enumerate(rewards):
             agent_name = loaded_agents[i]["agent_name"]
             print(f"Agent {agent_name}\tR:[{reward}], I:[{final_infos[i]}]")
+
+        graph_eval_results(
+            title="Boo!",
+            agent_names=[agent["agent_id"] for agent in loaded_agents],
+            rewards=rewards,
+            extra_infos=final_infos
+        )
+
 
