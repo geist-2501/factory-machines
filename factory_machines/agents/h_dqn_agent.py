@@ -495,19 +495,13 @@ class HDQNTrainingWrapper:
             q1_loss, q2_loss = loss
             q1_grad_norm, q2_grad_norm = grad_norm
 
-            if q1_loss is not None:
+            if q1_loss and q1_grad_norm:
                 self.q1_loss_history.append(q1_loss.data.cpu().numpy())
                 self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
-            else:
-                self.q1_loss_history.append(np.nan)
-                self.q1_grad_norm_history.append(np.nan)
 
-            if q2_loss is not None:
+            if q2_loss and q2_grad_norm:
                 self.q2_loss_history.append(q2_loss.data.cpu().numpy())
                 self.q2_grad_norm_history.append(q2_grad_norm.data.cpu().numpy())
-            else:
-                self.q2_loss_history.append(np.nan)
-                self.q2_grad_norm_history.append(np.nan)
 
             self.q1_lr_history.append(self.q1_lr_sched.get_last_lr())
             self.q2_lr_history.append(self.q2_lr_sched.get_last_lr())
