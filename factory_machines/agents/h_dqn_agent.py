@@ -17,7 +17,7 @@ from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWith
 from factory_machines.agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from factory_machines.agents.utils import can_graph, smoothen, parse_int_list, StaticLinearDecay, \
     SuccessRateWithTimeLimitDecay, label_values
-from talos import Agent, ExtraState, EnvFactory, SaveCallback
+from talos import Agent, ExtraState, EnvFactory, SaveCallback, get_cli_state
 
 DictObsType = TypeVar("DictObsType")
 FlatObsType = TypeVar("FlatObsType")
@@ -29,8 +29,6 @@ class HDQNAgent(Agent, ABC):
     Hierarchical Deep Q-Network agent.
     """
 
-    debug = False
-
     def __init__(
             self,
             obs: DictObsType,
@@ -39,6 +37,7 @@ class HDQNAgent(Agent, ABC):
             device: str = 'cpu'
     ) -> None:
         super().__init__("h-DQN")
+        self.debug = get_cli_state().debug_mode
 
         self.device = device
         self.gamma = 0.99
@@ -154,7 +153,7 @@ class HDQNAgent(Agent, ABC):
         loss = self.get_loss(s, a, r, s_dash, is_done, net, net_fixed)
 
         loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
+        grad_norm = nn.utils.clip_grad_norm_(net.params(), max_grad_norm)
         opt.step()
 
         return loss, grad_norm
@@ -244,7 +243,7 @@ class HDQNTrainingWrapper:
         self.batch_size = config.getint("batch_size")
         self.eval_freq = config.getint("eval_freq")
 
-        self.max_grad_norm = 1000
+        self.max_grad_norm = config.getint("grad_clip")
 
         # Init the network shapes.
         q1_hidden_layers = parse_int_list(config.get("q1_hidden_layers"))

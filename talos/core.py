@@ -1,6 +1,7 @@
 import configparser
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import List, Dict, Tuple, Callable, Any
 
 import gym

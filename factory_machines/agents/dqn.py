@@ -27,6 +27,9 @@ class DQN(nn.Module):
     def get_layers(self):
         return [self.in_size, *self.hidden_layers, self.out_size]
 
+    def params(self):
+        return self.net.parameters()
+
     def set_hidden_layers(self, hidden_layers: List[int]):
         """
         Set the configuration of the hidden layers.
@@ -73,7 +76,6 @@ class DQN(nn.Module):
         with torch.no_grad():
             return np.array(self.forward(state).cpu())
 
-
     @staticmethod
     def _build_net(layers: List[int]) -> nn.Sequential:
         net = nn.Sequential()
@@ -101,7 +103,7 @@ def compute_td_loss(
 ):
     """
     Compute the temporal difference loss for a batch of observations.
-    According to formula $$[(r + gamma max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
+    According to formula $$[(r + gamma * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
     """
 
     states = torch.tensor(states, device=net.device, dtype=torch.float32)

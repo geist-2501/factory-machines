@@ -9,6 +9,7 @@ from talos.cli.config import app as config_app
 from talos.cli.list import app as list_app
 from talos.cli.talfile import talfile_app
 from talos.core import load_config, create_env_factory, get_device, create_agent, create_save_callback
+from talos.global_state import get_cli_state
 from talos.error import *
 from talos.file import TalFile
 
@@ -40,16 +41,21 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
-    version: Optional[bool] = typer.Option(
-        None,
-        "--version",
-        "-v",
-        help="Show the application's version and exit.",
-        callback=_version_callback,
-        is_eager=True,
-    )
+        debug_mode: bool = typer.Option(
+            False,
+            "--dbg",
+            help="Active debug mode. Triggers things like extra logging."
+        ),
+        version: Optional[bool] = typer.Option(
+            None,
+            "--version",
+            "-v",
+            help="Show the application's version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        )
 ) -> None:
-    return
+    get_cli_state().debug_mode = debug_mode
 
 
 @app.command()
@@ -58,46 +64,48 @@ def train(
             "DQN",
             "--agent",
             "-a",
+            help="Set the agent to train with",
             prompt="Agent to train with?"
         ),
         opt_config: str = typer.Option(
             "talos_settings.ini",
             "--config",
             "-c",
+            help="Set the path of the config to use",
             prompt="Configuration to use?"
         ),
         opt_wrapper: str = typer.Option(
             None,
             "--wrapper",
-            "-w"
+            "-w",
+            help="Set the wrapper to use (currently only 1 supported)"
         ),
         opt_env: str = typer.Option(
             "CartPole-v1",
             "--env",
             "-e",
+            help="Set the environment to use",
             prompt="Environment to train in?"
         ),
         opt_env_args: List[str] = typer.Option(
             [],
             "--env-arg",
-        ),
-        opt_env_arg_iter: str = typer.Option(
-            None,
-            "--env-arg-iter"
+            help="Set the arguments to be passed to the environment. Write as `key=val`."
         ),
         opt_autosave: Optional[str] = typer.Option(
             None,
-            "--autosave-path"
+            "--autosave-path",
+            help="Set the path to save the agent to automatically"
         ),
         opt_seed: int = typer.Option(
             0,
             "--seed",
-            "-s"
+            "-s",
+            help="Set the random seed to use."
         )
 ) -> None:
     """Train an agent on a given environment."""
     opt_env_args = _convert_to_key_value_list(opt_env_args)
-    opt_env_arg_iter = _convert_to_key_list_value(opt_env_arg_iter)
 
     device = get_device()
     print(f"Using device [bold white]{device}.[/]")
