@@ -565,8 +565,9 @@ class HDQNTrainingWrapper:
                 self.n_since_last_peak += 1
                 if self.n_since_last_peak == self.n_save_after_peak:
                     tqdm.write("!! Saving snapshot... !!")
-                    self.save_callback(self.agent.save(), self.artifacts, timekeeper.get_env_steps(),
-                                       f"peak-{extrinsic_score}")
+                    score_at_peak, agent_data = self.best_agent_score
+                    self.save_callback(agent_data, self.artifacts, timekeeper.get_env_steps(),
+                                       f"peak-{score_at_peak}")
 
         _update_graphs(
             self.axs,
