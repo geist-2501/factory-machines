@@ -1,12 +1,19 @@
 from gym.envs.registration import register
 
 from factory_machines.envs.fm_env_multi import FactoryMachinesEnvMulti
+from factory_machines.envs.fm_env_multi_v2 import FactoryMachinesEnvMultiV2
 from factory_machines.envs.fm_env_single import FactoryMachinesEnvSingle
 from factory_machines.envs.orderworld_basic import OrderWorldBasic
 
 register(
     id='FMMulti-v0',
     entry_point='factory_machines.envs:FactoryMachinesEnvMulti',
+    max_episode_steps=300,
+)
+
+register(
+    id='FMMulti-v1',
+    entry_point='factory_machines.envs:FactoryMachinesEnvMultiV2',
     max_episode_steps=300,
 )
 
