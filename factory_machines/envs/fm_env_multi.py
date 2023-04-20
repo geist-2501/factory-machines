@@ -64,6 +64,11 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
         self._num_orders_pending = self._total_num_orders
         self._open_orders = []
 
+        # Immediately create an open order.
+        self._num_orders_pending -= 1
+        order = self._order_generator.make_order(self._num_depots)
+        self._open_orders.append((self._timestep, order))
+
         return obs, {}
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:

@@ -10,6 +10,6 @@ class FactoryMachinesEnvMultiV2(FactoryMachinesEnvMulti):
     _timestep_punishment = -0.5
     _episode_reward = 10
 
-    _age_bands = 100
+    _age_bands = 3
     _max_age_reward = 1
     _age_max_timesteps = 50

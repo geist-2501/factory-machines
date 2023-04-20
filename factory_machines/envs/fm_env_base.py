@@ -99,6 +99,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     _collision_punishment = -0.1
     _timestep_punishment = -0.1
 
+    _show_tracer = False
+
     up, left, down, right, grab = range(5)
 
     def __init__(
@@ -328,7 +330,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
                         )
                     )
 
-        self.route_tracer.render(self.screen, cell_size, self.colors["black"], self.colors["route"])
+        if self._show_tracer:
+            self.route_tracer.render(self.screen, cell_size, self.colors["black"], self.colors["route"])
 
         # Draw agent.
         pygame.draw.circle(
