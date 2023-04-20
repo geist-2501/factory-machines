@@ -254,7 +254,6 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             print(f"Reward: {reward}")
             print(obs)
 
-
         return obs, reward, False, False, info
 
     @abstractmethod
