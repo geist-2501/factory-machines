@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Dict, Callable, Tuple
+from typing import Dict, Callable, Tuple, List
 
 import gym
+from gym.envs.registration import register
 
 from talos.agent import Agent
 from talos.error import AgentNotFound, WrapperNotFound
@@ -23,9 +24,17 @@ class WrapperSpec:
     wrapper_factory: Callable[[gym.Env], gym.Wrapper]
 
 
+@dataclass
+class EnvSpec:
+    """A specification for using environments with Talos. Wraps the OpenAI Gym registration ability."""
+    id: str
+    graphing_wrapper: Callable[[List[str], List[float], List[Dict]], None]
+
+
 # Global registries for storing configs.
 agent_registry: Dict[str, AgentSpec] = {}
 wrapper_registry: Dict[str, WrapperSpec] = {}
+env_registry: Dict[str, EnvSpec] = {}
 
 
 def _dummy_training_wrapper(
@@ -38,8 +47,17 @@ def _dummy_training_wrapper(
     pass
 
 
-def _dummy_graphing_wrapper(
+def _dummy_agent_graphing_wrapper(
         artifacts
+):
+    print("Dummy graphing wrapper in use - no graphs produced.")
+    pass
+
+
+def _dummy_env_graphing_wrapper(
+        agent_names: List[str],
+        rewards: List[float],
+        extra_infos: List[Dict]
 ):
     print("Dummy graphing wrapper in use - no graphs produced.")
     pass
@@ -49,7 +67,7 @@ def register_agent(
         agent_id: str,
         agent_factory: Callable[[], Agent],
         training_wrapper: Callable = _dummy_training_wrapper,
-        graphing_wrapper: Callable[[Dict], None] = _dummy_graphing_wrapper,
+        graphing_wrapper: Callable[[Dict], None] = _dummy_agent_graphing_wrapper,
 ):
     """Register an agent with Talos."""
     global agent_registry
@@ -109,5 +127,37 @@ def get_wrapper(
     if id in wrapper_registry:
         spec = wrapper_registry[id]
         return spec.wrapper_factory
+    else:
+        raise WrapperNotFound
+
+
+def register_env(
+        env_id: str,
+        entry_point: str,
+        graphing_wrapper: Callable[[List[str], List[float], List[Dict]], None] = _dummy_env_graphing_wrapper
+):
+    """Register an environment with Talos."""
+    global env_registry
+
+    env_spec = EnvSpec(
+        id=env_id,
+        graphing_wrapper=graphing_wrapper
+    )
+
+    env_registry[env_id] = env_spec
+
+    # Register the environment with the OpenAI Gym.
+    register(
+        id=env_id,
+        entry_point=entry_point
+    )
+
+
+def get_env_graphing_wrapper(env_id: str):
+    global env_registry
+
+    if env_id in env_registry:
+        spec = env_registry[env_id]
+        return spec.graphing_wrapper
     else:
         raise WrapperNotFound

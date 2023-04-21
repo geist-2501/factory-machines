@@ -5,7 +5,7 @@ from gym.wrappers import RecordVideo
 from rich import print
 
 from talos.cli.cli_utils import _convert_to_key_value_list
-from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent, graph_eval_results
+from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent, graph_env_results
 from talos.error import TalfileLoadError, AgentNotFound
 from talos.file import read_talfile
 
@@ -192,7 +192,8 @@ def compare(
             print("[bold red]failed![/] Couldn't find agent definition. Make sure it's been registered.")
 
     # Check all the environments are the same.
-    if not all(agent["env_name"] == loaded_agents[0]["env_name"] for agent in loaded_agents):
+    common_env_id = loaded_agents[0]["env_name"]
+    if not all(agent["env_name"] == common_env_id for agent in loaded_agents):
         print("[bold red]Failure![/] Agents don't all use the same environment. Cannot proceed.")
         raise typer.Abort()
 
@@ -202,17 +203,5 @@ def compare(
         should_continue = typer.confirm("Only some agents loaded, ready to proceed?", default=False)
 
     if should_continue:
-        rewards, final_infos = evaluate_agents(loaded_agents, n_episodes=opt_n_episodes)
-        print("\nComparison results:")
-        for i, reward in enumerate(rewards):
-            agent_name = loaded_agents[i]["agent_name"]
-            print(f"Agent {agent_name}\tR:[{reward}], I:[{final_infos[i]}]")
-
-        graph_eval_results(
-            title="Boo!",
-            agent_names=[agent["agent_id"] for agent in loaded_agents],
-            rewards=rewards,
-            extra_infos=final_infos
-        )
-
-
+        rewards, infos = evaluate_agents(loaded_agents, n_episodes=opt_n_episodes)
+        graph_env_results(common_env_id, env_args, loaded_agents, rewards, infos)
