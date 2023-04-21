@@ -2,6 +2,7 @@ import os.path
 from typing import Optional
 
 import typer
+from rich import print
 
 from talos.core import get_device, create_env_factory, create_agent, create_save_callback
 from talos.file import TalFile
