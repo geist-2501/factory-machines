@@ -17,7 +17,7 @@ from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWith
 from factory_machines.agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from factory_machines.agents.utils import can_graph, smoothen, parse_int_list, StaticLinearDecay, \
     SuccessRateWithTimeLimitDecay, label_values
-from talos import Agent, ExtraState, EnvFactory, SaveCallback, get_cli_state
+from talos import Agent, ExtraState, EnvFactory, SaveCallback, get_cli_state, ProfileConfig
 
 DictObsType = TypeVar("DictObsType")
 FlatObsType = TypeVar("FlatObsType")
@@ -228,7 +228,7 @@ class HDQNTrainingWrapper:
             env_factory: EnvFactory,
             agent: HDQNAgent,
             artifacts: Dict,
-            config: configparser.SectionProxy,
+            config: ProfileConfig,
             save_callback: SaveCallback
     ) -> None:
         self.env_factory = env_factory
@@ -246,8 +246,8 @@ class HDQNTrainingWrapper:
         self.max_grad_norm = config.getint("grad_clip")
 
         # Init the network shapes.
-        q1_hidden_layers = parse_int_list(config.get("q1_hidden_layers"))
-        q2_hidden_layers = parse_int_list(config.get("q2_hidden_layers"))
+        q1_hidden_layers = config.getlist("q1_hidden_layers")
+        q2_hidden_layers = config.getlist("q2_hidden_layers")
         self.agent.set_hidden_layers(q1_hidden_layers, q2_hidden_layers)
 
         # Init optimisers.
@@ -275,7 +275,7 @@ class HDQNTrainingWrapper:
         self.gather_freq = 50
         self.save_freq = 5000
 
-        self.k_catch_up = config.getint("k_catch_up")
+        self.k_catch_up = config.getint("k_catch_up", required=False)
 
         replay_buffer_size = config.getint("replay_buffer_size")
         self.agent.set_replay_buffer_size(replay_buffer_size)
@@ -608,7 +608,7 @@ class HDQNTrainingWrapper:
 def hdqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
-        dqn_config: configparser.SectionProxy,
+        dqn_config: ProfileConfig,
         artifacts: Dict,
         save_callback
 ):

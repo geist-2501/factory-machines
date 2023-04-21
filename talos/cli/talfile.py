@@ -2,7 +2,6 @@ from typing import List, Optional
 
 import typer
 from gym.wrappers import RecordVideo
-from matplotlib import pyplot as plt
 from rich import print
 
 from talos.cli.cli_utils import _convert_to_key_value_list

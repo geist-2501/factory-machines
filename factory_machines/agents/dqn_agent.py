@@ -11,7 +11,7 @@ from tqdm import trange, tqdm
 from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list
 from factory_machines.agents.replay_buffer import ReplayBuffer
 from factory_machines.agents.dqn import DQN, compute_td_loss
-from talos import Agent
+from talos import Agent, ProfileConfig
 
 
 class DQNAgent(Agent):
@@ -144,7 +144,7 @@ def train_dqn_agent(
         evaluation_freq=1000,
         gather_freq=20,
         replay_buffer_size=10**4,
-        max_grad_norm=5000
+        grad_clip=5000
 ):
     env = env_factory(0)
     state, _ = env.reset()
@@ -186,7 +186,7 @@ def train_dqn_agent(
         loss = agent.compute_loss(s, a, r, s_dash, is_done)
 
         loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
+        grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), grad_clip)
         opt.step()
         lr_sched.step()
 
@@ -253,14 +253,14 @@ def dqn_graphing_wrapper(artifacts):
 def dqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
-        dqn_config: configparser.SectionProxy,
+        dqn_config: ProfileConfig,
         artifacts: Dict,
         save_callback
 ):
     train_dqn_agent(
         env_factory=env_factory,
         agent=agent,
-        hidden_layers=parse_int_list(dqn_config.get("hidden_layers")),
+        hidden_layers=dqn_config.getlist("hidden_layers"),
         artifacts=artifacts,
         learning_rate=dqn_config.getfloat("learning_rate"),
         epsilon_decay=StaticLinearDecay(
@@ -274,5 +274,6 @@ def dqn_training_wrapper(
         update_target_net_freq=dqn_config.getint("refresh_target_network_freq"),
         evaluation_freq=dqn_config.getint("eval_freq"),
         gather_freq=dqn_config.getint("gather_freq"),
-        replay_buffer_size=dqn_config.getint("replay_buffer_size")
+        replay_buffer_size=dqn_config.getint("replay_buffer_size"),
+        grad_clip=dqn_config.getint("grad_clip")
     )
