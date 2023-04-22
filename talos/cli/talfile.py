@@ -150,11 +150,13 @@ def compare(
         opt_env_args: List[str] = typer.Option(
             [],
             "--env-arg",
+            help="Arguments to pass to the environment in the form `param=value`."
         ),
         opt_n_episodes: int = typer.Option(
             3,
             "--num-episodes",
-            "-n"
+            "-n",
+            help="The number of evaluation episodes to run for each agent."
         )
 ):
     """
