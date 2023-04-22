@@ -1,9 +1,12 @@
 import math
-from typing import Optional, Tuple, List, Union
+from collections import defaultdict
+from typing import Optional, Tuple, List, Union, Dict
 
 import numpy as np
 from gym import spaces
 from gym.core import ActType, ObsType
+from matplotlib import pyplot as plt
+
 from factory_machines.envs.fm_env_base import FactoryMachinesEnvBase
 from factory_machines.envs.order_generators import OrderGenerator, GaussianOrderGenerator
 from factory_machines.envs.pygame_utils import draw_lines
@@ -86,7 +89,7 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
         info = {
             **info,
-            "orders per minute": self._get_num_completed_orders() / self._timestep
+            "orders per minute": self._get_num_completed_orders() / self._timestep * 60
         }
 
         return obs, reward, terminated, False, info
@@ -190,3 +193,41 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
     def _get_num_completed_orders(self):
         return self._total_num_orders - (self._num_orders_pending + len(self._open_orders))
+
+
+def fm_multi_graphing_wrapper(env_args: Dict, agent_names: List[str], rewards: List[float], extra_infos: List[Dict]):
+    map_id = env_args["map_id"] if "map_id" in env_args else "0"
+    title = f"Performance in the Factory Machines env (map {map_id})"
+
+    num_plots = len(extra_infos[0]) + 1
+    fig, axs = plt.subplots(1, num_plots, figsize=(num_plots * 3, 3))
+    fig.suptitle(title)
+
+    swizzled_infos = defaultdict(lambda: [])
+    swizzled_infos["reward"] = rewards
+    for extra_info in extra_infos:
+        for k, v in extra_info.items():
+            swizzled_infos[k].append(v)
+
+    cmap = plt.get_cmap("tab10")
+    colours = [cmap(i) for i in range(len(agent_names))]
+
+    def _graph_bar(ax, metric):
+        values = swizzled_infos[metric]
+        ax.bar(agent_names, values, color=colours, label=agent_names)
+        ax.set_title(metric)
+        ax.set_xticklabels(agent_names, rotation=30, ha='right')
+
+    _graph_bar(axs[0], "reward")
+
+    _graph_bar(axs[1], "orders per minute")
+    axs[1].set_ylabel("Orders per minute")
+
+    _graph_bar(axs[2], "distance")
+    axs[2].set_ylabel("Distance travelled (m)")
+
+    _graph_bar(axs[3], "timesteps")
+    axs[3].set_ylabel("Time taken (s)")
+
+    plt.tight_layout()
+    plt.show()

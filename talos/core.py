@@ -1,7 +1,6 @@
 import configparser
 import time
 from collections import defaultdict
-from dataclasses import dataclass
 from typing import List, Dict, Tuple, Callable, Any
 
 import gym
@@ -13,7 +12,7 @@ from rich import print
 from talos.agent import Agent
 from talos.error import *
 from talos.file import TalFile
-from talos.registration import get_agent, get_wrapper, get_agent_graphing
+from talos.registration import get_agent, get_wrapper, get_agent_graphing, get_env_graphing_wrapper
 
 
 def play_agent(
@@ -59,7 +58,7 @@ def play_agent(
     return reward_history
 
 
-def evaluate_agents(loaded_agents: List[Dict], max_episode_timesteps=1000, n_episodes=3):
+def evaluate_agents(loaded_agents: List[Dict], max_episode_timesteps=1000, n_episodes=3) -> Tuple[List, List]:
     rewards = []
     final_infos = []
     for loaded_agent in loaded_agents:
@@ -71,7 +70,17 @@ def evaluate_agents(loaded_agents: List[Dict], max_episode_timesteps=1000, n_epi
         rewards.append(total_reward)
         final_infos.append(final_info)
 
+    print("\nComparison results:")
+    for i, reward in enumerate(rewards):
+        agent_name = loaded_agents[i]["agent_name"]
+        print(f"Agent {agent_name}\tR:[{reward}], I:[{final_infos[i]}]")
+
     return rewards, final_infos
+
+
+def graph_env_results(env_id: str, env_args: Dict, loaded_agents: List[Dict], rewards: List, final_infos: List[Dict]):
+    graphing_wrapper = get_env_graphing_wrapper(env_id)
+    graphing_wrapper(env_args, [agent["agent_id"] for agent in loaded_agents], rewards, final_infos)
 
 
 def load_config(config_path: str) -> configparser.ConfigParser:
@@ -197,26 +206,3 @@ def create_save_callback(id: str, config: Dict, used_wrappers: str, env_name: st
         talfile.write('-'.join(filename_parts))
 
     return callback
-
-
-def graph_eval_results(title: str, agent_names: List[str], rewards: List[float], extra_infos: List[Dict]):
-    num_plots = len(extra_infos[0]) + 1
-    fig, axs = plt.subplots(1, num_plots, figsize=(num_plots*3, 3))
-
-    swizzled_infos = defaultdict(lambda: [])
-    swizzled_infos["reward"] = rewards
-    for extra_info in extra_infos:
-        for k, v in extra_info.items():
-            swizzled_infos[k].append(v)
-
-    cmap = plt.get_cmap("tab10")
-    colours = [cmap(i) for i in range(len(agent_names))]
-
-    for ax, info in zip(axs, swizzled_infos.items()):
-        metric, values = info
-        ax.bar(agent_names, values, color=colours, label=agent_names)
-        ax.set_title(metric)
-        ax.legend()
-        ax.set_xticklabels(agent_names, rotation=30, ha='right')
-
-    plt.show()
