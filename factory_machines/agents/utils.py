@@ -173,9 +173,17 @@ class BetterReduceLROnPlateau(torch.optim.lr_scheduler.ReduceLROnPlateau):
         return self.optimizer.param_groups[0]['lr']  # ew.
 
 
-def label_values(name_func: Callable[[int], str], values: np.ndarray) -> List[str]:
+def label_values(
+        values: np.ndarray,
+        name_func: Callable[[int], str] = None,
+        name_list: List[str] = None
+) -> List[str]:
     out = []
-    names = [name_func(action) for action in range(len(values))]
+    if name_func is not None:
+        names = [name_func(action) for action in range(len(values))]
+    else:
+        names = name_list
+
     for name, value in zip(names, values):
         out.append(f"{name}: {value:.2f}")
 

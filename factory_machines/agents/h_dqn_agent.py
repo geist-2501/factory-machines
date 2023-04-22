@@ -104,7 +104,7 @@ class HDQNAgent(Agent, ABC):
             if self.debug:
                 print(f"Picked goal {self.goal_to_str(goal)}")
                 goal_values = self.q2_net.get_all_action_values(meta_controller_obs)
-                print(f"Current goal-values: {label_values(self.goal_to_str, goal_values) }")
+                print(f"Current goal-values: {label_values(goal_values, name_func=self.goal_to_str) }")
 
         # Get an action from the controller, incorporating the goal.
         controller_obs = self.to_q1(obs, goal)
@@ -112,7 +112,7 @@ class HDQNAgent(Agent, ABC):
 
         if self.debug:
             action_values = self.q1_net.get_all_action_values(controller_obs)
-            print(f"Current action-values: {label_values(self.action_to_str, action_values)}")
+            print(f"Current action-values: {label_values(action_values, name_func=self.action_to_str)}")
 
         return action, goal
 

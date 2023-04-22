@@ -8,10 +8,10 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list
+from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list, label_values
 from factory_machines.agents.replay_buffer import ReplayBuffer
 from factory_machines.agents.dqn import DQN, compute_td_loss
-from talos import Agent, ProfileConfig
+from talos import Agent, ProfileConfig, get_cli_state
 
 
 class DQNAgent(Agent):
@@ -19,8 +19,14 @@ class DQNAgent(Agent):
     Deep Q-Network agent.
     Uses the technique described in Minh et al. in 'Playing Atari with Deep Reinforcement Learning'.
     """
+
+    action_labels = ["up", "left", "down", "right", "grab"]  # This is a nasty hack.
+
     def __init__(self, obs, n_actions, device='cpu'):
         super().__init__("DQN")
+
+        self.debug_mode = get_cli_state().debug_mode
+
         self.epsilon = 1
         self.gamma = 0.99
         self.n_actions = n_actions
@@ -58,6 +64,9 @@ class DQNAgent(Agent):
         )
 
     def get_action(self, obs, extra_state=None) -> Tuple[int, Any]:
+        if self.debug_mode:
+            action_values = self.net.get_all_action_values(obs)
+            print(f"Current action-values: {label_values(action_values, name_list=self.action_labels)}")
         return self.get_optimal_actions(obs), extra_state
 
     def get_epsilon_actions(self, states: np.ndarray):

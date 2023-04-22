@@ -10,6 +10,7 @@ from gym.core import RenderFrame, ActType, ObsType
 from factory_machines.envs.pygame_utils import History
 from factory_machines.envs.route_tracer import RouteTracer
 from factory_machines.envs.warehouse import Map
+from talos import get_cli_state
 
 
 def _opt_bool(opt: Union[str, bool]) -> bool:
@@ -99,8 +100,6 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
     _collision_punishment = -0.1
     _timestep_punishment = -0.1
 
-    _show_tracer = False
-
     up, left, down, right, grab = range(5)
 
     def __init__(
@@ -111,6 +110,8 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             verbose=False,
             correct_obs=True
     ) -> None:
+
+        self.debug_mode = get_cli_state().debug_mode
 
         agent_capacity = int(agent_capacity)
         self._verbose = _opt_bool(verbose)
@@ -329,7 +330,7 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
                         )
                     )
 
-        if self._show_tracer:
+        if self.debug_mode:
             self.route_tracer.render(self.screen, cell_size, self.colors["black"], self.colors["route"])
 
         # Draw agent.
