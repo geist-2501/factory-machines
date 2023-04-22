@@ -231,7 +231,7 @@ def _init_graphing():
     return axs
 
 
-def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
+def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, gather_freq, eval_freq):
     if can_graph() is False:
         return
 
@@ -243,19 +243,28 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
     axs[1].set_title("Loss")
     axs[2].set_title("Grad Norm")
 
-    axs[0].plot(mean_reward_history)
-    axs[1].plot(smoothen(loss_history))
-    axs[2].plot(smoothen(grad_norm_history))
+    eval_x = np.array(range(len(mean_reward_history))) * eval_freq
+    gather_x = np.array(range(len(loss_history))) * gather_freq
+    axs[0].plot(eval_x, mean_reward_history)
+    axs[1].plot(gather_x, smoothen(loss_history))
+    axs[2].plot(gather_x, smoothen(grad_norm_history))
 
+    axs[0].set_xlabel("Steps")
+    axs[1].set_xlabel("Steps")
+    axs[2].set_xlabel("Steps")
+
+    plt.tight_layout()
     plt.pause(0.05)
 
 
-def dqn_graphing_wrapper(artifacts):
+def dqn_graphing_wrapper(artifacts, config: ProfileConfig):
     _update_graphs(
         _init_graphing(),
         mean_reward_history=artifacts["reward"],
         loss_history=artifacts["loss"],
-        grad_norm_history=artifacts["grad_norm"]
+        grad_norm_history=artifacts["grad_norm"],
+        eval_freq=config.getint("eval_freq"),
+        gather_freq=config.getint("gather_freq")
     )
 
 

@@ -5,6 +5,7 @@ import gym
 from gym.envs.registration import register
 
 from talos.agent import Agent
+from talos.profile import ProfileConfig
 from talos.error import AgentNotFound, WrapperNotFound
 
 
@@ -13,7 +14,7 @@ class AgentSpec:
     """A specification for creating agents with Talos."""
     id: str
     training_wrapper: Callable
-    graphing_wrapper: Callable[[Dict], None]
+    graphing_wrapper: Callable[[Dict, ProfileConfig], None]
     agent_factory: Callable[[int, int], Agent]
 
 
@@ -48,7 +49,8 @@ def _dummy_training_wrapper(
 
 
 def _dummy_agent_graphing_wrapper(
-        artifacts
+        artifacts,
+        config: ProfileConfig
 ):
     print("Dummy graphing wrapper in use - no graphs produced.")
     pass
@@ -67,7 +69,7 @@ def register_agent(
         agent_id: str,
         agent_factory: Callable[[], Agent],
         training_wrapper: Callable = _dummy_training_wrapper,
-        graphing_wrapper: Callable[[Dict], None] = _dummy_agent_graphing_wrapper,
+        graphing_wrapper: Callable[[Dict, ProfileConfig], None] = _dummy_agent_graphing_wrapper,
 ):
     """Register an agent with Talos."""
     global agent_registry
@@ -99,7 +101,7 @@ def get_agent(
     return spec.agent_factory, spec.training_wrapper
 
 
-def get_agent_graphing(agent_id: str) -> Callable[[Dict], None]:
+def get_agent_graphing(agent_id: str) -> Callable[[Dict, ProfileConfig], None]:
     spec = _get_spec(agent_id)
     return spec.graphing_wrapper
 

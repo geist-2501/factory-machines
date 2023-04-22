@@ -97,6 +97,24 @@ class SlamAstarTest(unittest.TestCase):
         self.assertEqual(path[0], (0, 0))
         self.assertEqual(path[5], (2, -1))
 
+    def test_should_calc_alternate_path(self):
+        initial_obs = np.array([
+            [1, 1, 1],
+            [1, 0, 0],
+            [1, 0, 0],
+        ])
+        slam = SlamAstar(initial_obs)
+        slam.update(np.array([1, 0]), np.array([
+            [1, 1, 1],
+            [0, 0, 1],
+            [0, 0, 1],
+        ]))
+
+        path = slam.get_path(np.array([0, 0]), np.array([4, 0]))
+
+        self.assertIsNotNone(path)
+        self.assertEqual(len(path), 3)
+        self.assertEqual(path[2], (1, 1))
 
 if __name__ == '__main__':
     unittest.main()

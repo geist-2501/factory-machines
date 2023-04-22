@@ -622,7 +622,8 @@ def hdqn_training_wrapper(
 
 
 def hdqn_graphing_wrapper(
-        artifacts: Dict
+        artifacts: Dict,
+        config: ProfileConfig
 ):
     _update_graphs(
         _init_graphing(),
@@ -630,7 +631,9 @@ def hdqn_graphing_wrapper(
         loss_history=artifacts["loss"],
         grad_norm_history=artifacts["grad_norm"],
         epsilon_history=artifacts["epsilon"],
-        lr_history=artifacts["lr"]
+        lr_history=artifacts["lr"],
+        gather_freq=config.getint("gather_freq"),
+        eval_freq=config.getint("eval_freq"),
     )
 
 
@@ -652,13 +655,25 @@ def _init_graphing():
     return axs
 
 
-def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history, lr_history):
+def _update_graphs(
+        axs,
+        mean_reward_history,
+        loss_history,
+        grad_norm_history,
+        epsilon_history,
+        lr_history,
+        gather_freq,
+        eval_freq
+):
     if can_graph() is False:
         return
 
     plt.figure(1)
 
     ax_reward, ax_epsilon, ax_lr, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm = axs
+
+    eval_x = np.array(range(len(mean_reward_history[0]))) * eval_freq
+    gather_x = np.array(range(len(epsilon_history[:, 0]))) * gather_freq
 
     ax_reward.cla()
     ax_epsilon.cla()
@@ -669,14 +684,20 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     ax_q2_grad_norm.cla()
 
     ax_reward.set_title("Mean Reward")
-    ax_epsilon.set_title("Epsilon & LR")
+    ax_reward.set_xlabel("Steps")
+    ax_epsilon.set_title("Epsilon (left) & LR (right)")
+    ax_epsilon.set_xlabel("Steps")
     ax_q1_loss.set_title("Loss Q1")
+    ax_q1_loss.set_xlabel("Measurements")
     ax_q1_grad_norm.set_title("Grad Norm Q1")
+    ax_q1_grad_norm.set_xlabel("Measurements")
     ax_q2_loss.set_title("Loss Q2")
+    ax_q2_loss.set_xlabel("Measurements")
     ax_q2_grad_norm.set_title("Grad Norm Q2")
+    ax_q2_grad_norm.set_xlabel("Measurements")
 
-    ax_reward.plot(mean_reward_history[0])
-    ax_reward.plot(mean_reward_history[1])
+    ax_reward.plot(eval_x, mean_reward_history[0])
+    ax_reward.plot(eval_x, mean_reward_history[1])
 
     ax_q1_loss.plot(smoothen(loss_history[0]))
     ax_q2_loss.plot(smoothen(loss_history[1]))
@@ -684,12 +705,14 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     for i in range(epsilon_history.shape[1]):
         label = "Q2" if i == 0 else f"Q1-{i - 1}"
         label = "Q1-Out" if i == epsilon_history.shape[1] - 1 else label
-        ax_epsilon.plot(epsilon_history[:, i], label=label)
-    ax_epsilon.legend()
+        ax_epsilon.plot(gather_x, epsilon_history[:, i], label=label)
+    ax_epsilon.legend(loc="upper left")
+    ax_epsilon.set_xlabel("Steps")
 
-    ax_lr.plot(lr_history[0], label="Q1 LR", dashes=[1, 1])
-    ax_lr.plot(lr_history[1], label="Q2 LR", dashes=[1, 1])
-    ax_lr.legend()
+    gather_x_hack = (np.array(range(len(lr_history[0]))) * gather_freq).reshape((-1, 1))
+    ax_lr.plot(gather_x_hack, lr_history[0], label="Q1 LR", dashes=[1, 1])
+    ax_lr.plot(gather_x_hack, lr_history[1], label="Q2 LR", dashes=[1, 1])
+    ax_lr.legend(loc="upper right")
 
     ax_q1_grad_norm.plot(smoothen(grad_norm_history[0]))
     ax_q2_grad_norm.plot(smoothen(grad_norm_history[1]))

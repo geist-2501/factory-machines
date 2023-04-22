@@ -4,6 +4,7 @@ import typer
 from gym.wrappers import RecordVideo
 from rich import print
 
+from talos.profile import ProfileConfig
 from talos.cli.cli_utils import _convert_to_key_value_list
 from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent, graph_env_results
 from talos.error import TalfileLoadError, AgentNotFound
@@ -138,7 +139,7 @@ def graph(path: str):
         print(f"Couldn't load talfile {path}, " + str(ex))
         raise typer.Abort()
 
-    graph_agent(talfile.id, talfile.training_artifacts)
+    graph_agent(talfile.id, talfile.training_artifacts, ProfileConfig(talfile.config, {}))
 
 
 @talfile_app.command()

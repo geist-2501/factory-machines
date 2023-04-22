@@ -1,8 +1,8 @@
+import heapq
 import math
 from collections import defaultdict, deque
-from typing import Tuple, List, Union, Optional, Deque
+from typing import Tuple, List, Optional
 
-import heapq
 import numpy as np
 
 Coord = np.ndarray
@@ -61,8 +61,7 @@ class SlamAstar:
         for map_coord, content in self._range_map_coords(location, local_obs):
             self._set_map(map_coord, content)
 
-    def path_to(self, start: Coord, end: Coord) -> int:
-        """Get the next direction in the path from start to end."""
+    def get_path(self, start: Coord, end: Coord) -> Optional[List[HCoord]]:
         self._expand(start)
         self._expand(end)
 
@@ -70,6 +69,18 @@ class SlamAstar:
 
         if path is None or len(path) == 1:
             self._log(f"Could not find path from {start} to {end}")
+            alt_end = self._try_select_alternate_end(start, end)
+            path = self.astar(start, alt_end)
+            if path is None or len(path) == 1:
+                return None
+
+        return path
+
+    def path_to(self, start: Coord, end: Coord) -> int:
+        """Get the next direction in the path from start to end."""
+        path = self.get_path(start, end)
+
+        if path is None:
             return self.no_op
 
         curr_coord = path[0]  # Will always start with the current coord.
@@ -154,6 +165,48 @@ class SlamAstar:
                 valid_neighbours.append(neighbour)
 
         return valid_neighbours
+
+    def _try_select_alternate_end(self, start: Coord, end: Coord) -> Optional[Coord]:
+        start = tuple(start)
+        end = tuple(end)
+        open_cells = self._get_open_cells_in_island(start)
+        if len(open_cells) == 0:
+            return None
+
+        # Select the fittest open cell, by the lowest manhattan distance to the destination.
+        fittest_cell = open_cells[0]
+        fittest_cell_score = manhatten_heuristic(fittest_cell, end)
+        for cell in open_cells[1:]:
+            cell_score = manhatten_heuristic(cell, end)
+            if cell_score < fittest_cell_score:
+                fittest_cell = cell
+                fittest_cell_score = cell_score
+
+        return np.array(fittest_cell)
+
+    def _get_open_cells_in_island(self, start: HCoord) -> List[HCoord]:
+        stack = deque()
+        stack.append(start)
+        visited = set()
+        open_cells = list()
+        while len(stack) != 0:
+            current = stack.pop()
+            if self._is_open_cell(current):
+                open_cells.append(current)
+
+            neighbours = self._get_neighbours(current)
+            neighbours = [c for c in neighbours if c not in visited]
+            visited.update(neighbours)
+
+            stack.extend(neighbours)
+
+        return open_cells
+
+    def _is_open_cell(self, coord: HCoord) -> bool:
+        x, y = self._add_hcoord(coord, tuple(self._origin))
+        len_y, len_x = self.map.shape
+
+        return x == 0 or y == 0 or x == (len_x - 1) or y == (len_y - 1)
 
     @staticmethod
     def _add_hcoord(a: HCoord, b: HCoord) -> HCoord:

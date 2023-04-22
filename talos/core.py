@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from rich import print
 
+from talos.profile import ProfileConfig
 from talos.agent import Agent
 from talos.error import *
 from talos.file import TalFile
@@ -131,9 +132,9 @@ def create_env_factory(env_name, wrapper_name=None, render_mode='rgb_array', env
     return env_factory
 
 
-def graph_agent(agent_id: str, artifacts: Dict):
+def graph_agent(agent_id: str, artifacts: Dict, config: ProfileConfig):
     graphing_wrapper = get_agent_graphing(agent_id)
-    graphing_wrapper(artifacts)
+    graphing_wrapper(artifacts, config)
     plt.show()
 
 

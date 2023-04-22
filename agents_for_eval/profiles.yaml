@@ -21,13 +21,13 @@ final_dqn_map_0:
   env_args:
     map_id: '0'
   config:
-    total_steps :  80000
-    decay_steps :  78000
+    total_steps :  200000
+    decay_steps :  190000
     replay_buffer_size: 10000
     batch_size: 128
     refresh_target_network_freq :  1000
     hidden_layers:
-      - 64
+      - 128
       - 64
 
 final_dqn_map_1:
