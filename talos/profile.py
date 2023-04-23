@@ -5,6 +5,7 @@ import yaml
 from yaml import Loader
 
 from talos.error import ProfilePropertyNotFound
+from talos.util import parse_int_list
 
 
 class ProfileConfig:
@@ -22,7 +23,13 @@ class ProfileConfig:
         return self._get(name, float, required)
 
     def getlist(self, name: str, required=True) -> List:
-        return self._get(name, list, required)
+        raw_list = self._get(name, required=required)
+        if type(raw_list) is str:
+            return parse_int_list(raw_list)
+        elif type(raw_list) is list:
+            return raw_list
+
+        raise RuntimeError(f"Property '{name}' was not a parsable list.")
 
     def _get(self, name: str, conv=None, required=True):
         if name not in self._conf:
@@ -32,7 +39,7 @@ class ProfileConfig:
                 return None
         else:
             prop = self._conf[name]
-            return conv(prop) if prop is not None else prop
+            return conv(prop) if conv is not None else prop
 
     def to_dict(self) -> Dict:
         return dict(self._conf)  # Make a copy.
