@@ -99,11 +99,13 @@ def compute_td_loss(
         is_done: np.ndarray,
         gamma: float,
         net: DQN,
-        net_fixed: DQN
+        net_fixed: DQN,
+        delta: int = 1
 ):
     """
     Compute the temporal difference loss for a batch of observations.
-    According to formula $$[(r + gamma * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
+    Adapted from the usual TD-error formula into a TDδ-error.
+    According to formula $$[(r + gamma^delta * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
     """
 
     states = torch.tensor(states, device=net.device, dtype=torch.float32)
@@ -124,7 +126,7 @@ def compute_td_loss(
 
     next_state_values, _ = torch.max(predicted_next_qvalues, dim=1)
 
-    target_qvalues_for_actions = rewards + gamma * next_state_values
+    target_qvalues_for_actions = rewards + (gamma ** delta) * next_state_values
     target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
 
     # mean squared error loss to minimize
