@@ -214,7 +214,7 @@ def train_dqn_agent(
                 score
             )
 
-            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history)
+            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, gather_freq, evaluation_freq)
 
             tqdm.write(f"I[{step}], "
                        f"E[{agent.epsilon: .2f}], "

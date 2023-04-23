@@ -575,7 +575,9 @@ class HDQNTrainingWrapper:
             (self.q1_loss_history, self.q2_loss_history),
             (self.q1_grad_norm_history, self.q2_grad_norm_history),
             self.epsilon_history,
-            (self.q1_lr_history, self.q2_lr_history)
+            (self.q1_lr_history, self.q2_lr_history),
+            self.gather_freq,
+            self.eval_freq
         )
 
         self.artifacts["loss"] = (self.q1_loss_history, self.q2_loss_history)
