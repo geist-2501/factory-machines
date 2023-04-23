@@ -8,10 +8,10 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list
+from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list, label_values
 from factory_machines.agents.replay_buffer import ReplayBuffer
 from factory_machines.agents.dqn import DQN, compute_td_loss
-from talos import Agent
+from talos import Agent, ProfileConfig, get_cli_state
 
 
 class DQNAgent(Agent):
@@ -19,8 +19,14 @@ class DQNAgent(Agent):
     Deep Q-Network agent.
     Uses the technique described in Minh et al. in 'Playing Atari with Deep Reinforcement Learning'.
     """
+
+    action_labels = ["up", "left", "down", "right", "grab"]  # This is a nasty hack.
+
     def __init__(self, obs, n_actions, device='cpu'):
         super().__init__("DQN")
+
+        self.debug_mode = get_cli_state().debug_mode
+
         self.epsilon = 1
         self.gamma = 0.99
         self.n_actions = n_actions
@@ -58,6 +64,9 @@ class DQNAgent(Agent):
         )
 
     def get_action(self, obs, extra_state=None) -> Tuple[int, Any]:
+        if self.debug_mode:
+            action_values = self.net.get_all_action_values(obs)
+            print(f"Current action-values: {label_values(action_values, name_list=self.action_labels)}")
         return self.get_optimal_actions(obs), extra_state
 
     def get_epsilon_actions(self, states: np.ndarray):
@@ -144,7 +153,7 @@ def train_dqn_agent(
         evaluation_freq=1000,
         gather_freq=20,
         replay_buffer_size=10**4,
-        max_grad_norm=5000
+        grad_clip=5000
 ):
     env = env_factory(0)
     state, _ = env.reset()
@@ -186,7 +195,7 @@ def train_dqn_agent(
         loss = agent.compute_loss(s, a, r, s_dash, is_done)
 
         loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
+        grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), grad_clip)
         opt.step()
         lr_sched.step()
 
@@ -205,7 +214,7 @@ def train_dqn_agent(
                 score
             )
 
-            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history)
+            _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, gather_freq, evaluation_freq)
 
             tqdm.write(f"I[{step}], "
                        f"E[{agent.epsilon: .2f}], "
@@ -222,7 +231,7 @@ def _init_graphing():
     return axs
 
 
-def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
+def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, gather_freq, eval_freq):
     if can_graph() is False:
         return
 
@@ -234,33 +243,42 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history):
     axs[1].set_title("Loss")
     axs[2].set_title("Grad Norm")
 
-    axs[0].plot(mean_reward_history)
-    axs[1].plot(smoothen(loss_history))
-    axs[2].plot(smoothen(grad_norm_history))
+    eval_x = np.array(range(len(mean_reward_history))) * eval_freq
+    gather_x = np.array(range(len(loss_history))) * gather_freq
+    axs[0].plot(eval_x, mean_reward_history)
+    axs[1].plot(gather_x, smoothen(loss_history))
+    axs[2].plot(gather_x, smoothen(grad_norm_history))
 
+    axs[0].set_xlabel("Steps")
+    axs[1].set_xlabel("Steps")
+    axs[2].set_xlabel("Steps")
+
+    plt.tight_layout()
     plt.pause(0.05)
 
 
-def dqn_graphing_wrapper(artifacts):
+def dqn_graphing_wrapper(artifacts, config: ProfileConfig):
     _update_graphs(
         _init_graphing(),
         mean_reward_history=artifacts["reward"],
         loss_history=artifacts["loss"],
-        grad_norm_history=artifacts["grad_norm"]
+        grad_norm_history=artifacts["grad_norm"],
+        eval_freq=config.getint("eval_freq"),
+        gather_freq=config.getint("gather_freq")
     )
 
 
 def dqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
-        dqn_config: configparser.SectionProxy,
+        dqn_config: ProfileConfig,
         artifacts: Dict,
         save_callback
 ):
     train_dqn_agent(
         env_factory=env_factory,
         agent=agent,
-        hidden_layers=parse_int_list(dqn_config.get("hidden_layers")),
+        hidden_layers=dqn_config.getlist("hidden_layers"),
         artifacts=artifacts,
         learning_rate=dqn_config.getfloat("learning_rate"),
         epsilon_decay=StaticLinearDecay(
@@ -274,5 +292,6 @@ def dqn_training_wrapper(
         update_target_net_freq=dqn_config.getint("refresh_target_network_freq"),
         evaluation_freq=dqn_config.getint("eval_freq"),
         gather_freq=dqn_config.getint("gather_freq"),
-        replay_buffer_size=dqn_config.getint("replay_buffer_size")
+        replay_buffer_size=dqn_config.getint("replay_buffer_size"),
+        grad_clip=dqn_config.getint("grad_clip")
     )

@@ -17,7 +17,7 @@ from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWith
 from factory_machines.agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from factory_machines.agents.utils import can_graph, smoothen, parse_int_list, StaticLinearDecay, \
     SuccessRateWithTimeLimitDecay, label_values
-from talos import Agent, ExtraState, EnvFactory, SaveCallback, get_cli_state
+from talos import Agent, ExtraState, EnvFactory, SaveCallback, get_cli_state, ProfileConfig
 
 DictObsType = TypeVar("DictObsType")
 FlatObsType = TypeVar("FlatObsType")
@@ -104,7 +104,7 @@ class HDQNAgent(Agent, ABC):
             if self.debug:
                 print(f"Picked goal {self.goal_to_str(goal)}")
                 goal_values = self.q2_net.get_all_action_values(meta_controller_obs)
-                print(f"Current goal-values: {label_values(self.goal_to_str, goal_values) }")
+                print(f"Current goal-values: {label_values(goal_values, name_func=self.goal_to_str) }")
 
         # Get an action from the controller, incorporating the goal.
         controller_obs = self.to_q1(obs, goal)
@@ -112,7 +112,7 @@ class HDQNAgent(Agent, ABC):
 
         if self.debug:
             action_values = self.q1_net.get_all_action_values(controller_obs)
-            print(f"Current action-values: {label_values(self.action_to_str, action_values)}")
+            print(f"Current action-values: {label_values(action_values, name_func=self.action_to_str)}")
 
         return action, goal
 
@@ -228,7 +228,7 @@ class HDQNTrainingWrapper:
             env_factory: EnvFactory,
             agent: HDQNAgent,
             artifacts: Dict,
-            config: configparser.SectionProxy,
+            config: ProfileConfig,
             save_callback: SaveCallback
     ) -> None:
         self.env_factory = env_factory
@@ -246,8 +246,8 @@ class HDQNTrainingWrapper:
         self.max_grad_norm = config.getint("grad_clip")
 
         # Init the network shapes.
-        q1_hidden_layers = parse_int_list(config.get("q1_hidden_layers"))
-        q2_hidden_layers = parse_int_list(config.get("q2_hidden_layers"))
+        q1_hidden_layers = config.getlist("q1_hidden_layers")
+        q2_hidden_layers = config.getlist("q2_hidden_layers")
         self.agent.set_hidden_layers(q1_hidden_layers, q2_hidden_layers)
 
         # Init optimisers.
@@ -275,7 +275,7 @@ class HDQNTrainingWrapper:
         self.gather_freq = 50
         self.save_freq = 5000
 
-        self.k_catch_up = config.getint("k_catch_up")
+        self.k_catch_up = config.getint("k_catch_up", required=False)
 
         replay_buffer_size = config.getint("replay_buffer_size")
         self.agent.set_replay_buffer_size(replay_buffer_size)
@@ -575,7 +575,9 @@ class HDQNTrainingWrapper:
             (self.q1_loss_history, self.q2_loss_history),
             (self.q1_grad_norm_history, self.q2_grad_norm_history),
             self.epsilon_history,
-            (self.q1_lr_history, self.q2_lr_history)
+            (self.q1_lr_history, self.q2_lr_history),
+            self.gather_freq,
+            self.eval_freq
         )
 
         self.artifacts["loss"] = (self.q1_loss_history, self.q2_loss_history)
@@ -608,7 +610,7 @@ class HDQNTrainingWrapper:
 def hdqn_training_wrapper(
         env_factory: Callable[[int], gym.Env],
         agent: HDQNAgent,
-        dqn_config: configparser.SectionProxy,
+        dqn_config: ProfileConfig,
         artifacts: Dict,
         save_callback
 ):
@@ -622,7 +624,8 @@ def hdqn_training_wrapper(
 
 
 def hdqn_graphing_wrapper(
-        artifacts: Dict
+        artifacts: Dict,
+        config: ProfileConfig
 ):
     _update_graphs(
         _init_graphing(),
@@ -630,7 +633,9 @@ def hdqn_graphing_wrapper(
         loss_history=artifacts["loss"],
         grad_norm_history=artifacts["grad_norm"],
         epsilon_history=artifacts["epsilon"],
-        lr_history=artifacts["lr"]
+        lr_history=artifacts["lr"],
+        gather_freq=config.getint("gather_freq"),
+        eval_freq=config.getint("eval_freq"),
     )
 
 
@@ -652,13 +657,25 @@ def _init_graphing():
     return axs
 
 
-def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, epsilon_history, lr_history):
+def _update_graphs(
+        axs,
+        mean_reward_history,
+        loss_history,
+        grad_norm_history,
+        epsilon_history,
+        lr_history,
+        gather_freq,
+        eval_freq
+):
     if can_graph() is False:
         return
 
     plt.figure(1)
 
     ax_reward, ax_epsilon, ax_lr, ax_q1_loss, ax_q1_grad_norm, ax_q2_loss, ax_q2_grad_norm = axs
+
+    eval_x = np.array(range(len(mean_reward_history[0]))) * eval_freq
+    gather_x = np.array(range(len(epsilon_history[:, 0]))) * gather_freq
 
     ax_reward.cla()
     ax_epsilon.cla()
@@ -669,14 +686,20 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     ax_q2_grad_norm.cla()
 
     ax_reward.set_title("Mean Reward")
-    ax_epsilon.set_title("Epsilon & LR")
+    ax_reward.set_xlabel("Steps")
+    ax_epsilon.set_title("Epsilon (left) & LR (right)")
+    ax_epsilon.set_xlabel("Steps")
     ax_q1_loss.set_title("Loss Q1")
+    ax_q1_loss.set_xlabel("Measurements")
     ax_q1_grad_norm.set_title("Grad Norm Q1")
+    ax_q1_grad_norm.set_xlabel("Measurements")
     ax_q2_loss.set_title("Loss Q2")
+    ax_q2_loss.set_xlabel("Measurements")
     ax_q2_grad_norm.set_title("Grad Norm Q2")
+    ax_q2_grad_norm.set_xlabel("Measurements")
 
-    ax_reward.plot(mean_reward_history[0])
-    ax_reward.plot(mean_reward_history[1])
+    ax_reward.plot(eval_x, mean_reward_history[0])
+    ax_reward.plot(eval_x, mean_reward_history[1])
 
     ax_q1_loss.plot(smoothen(loss_history[0]))
     ax_q2_loss.plot(smoothen(loss_history[1]))
@@ -684,12 +707,14 @@ def _update_graphs(axs, mean_reward_history, loss_history, grad_norm_history, ep
     for i in range(epsilon_history.shape[1]):
         label = "Q2" if i == 0 else f"Q1-{i - 1}"
         label = "Q1-Out" if i == epsilon_history.shape[1] - 1 else label
-        ax_epsilon.plot(epsilon_history[:, i], label=label)
-    ax_epsilon.legend()
+        ax_epsilon.plot(gather_x, epsilon_history[:, i], label=label)
+    ax_epsilon.legend(loc="upper left")
+    ax_epsilon.set_xlabel("Steps")
 
-    ax_lr.plot(lr_history[0], label="Q1 LR", dashes=[1, 1])
-    ax_lr.plot(lr_history[1], label="Q2 LR", dashes=[1, 1])
-    ax_lr.legend()
+    gather_x_hack = (np.array(range(len(lr_history[0]))) * gather_freq).reshape((-1, 1))
+    ax_lr.plot(gather_x_hack, lr_history[0], label="Q1 LR", dashes=[1, 1])
+    ax_lr.plot(gather_x_hack, lr_history[1], label="Q2 LR", dashes=[1, 1])
+    ax_lr.legend(loc="upper right")
 
     ax_q1_grad_norm.plot(smoothen(grad_norm_history[0]))
     ax_q2_grad_norm.plot(smoothen(grad_norm_history[1]))

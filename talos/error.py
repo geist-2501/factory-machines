@@ -12,3 +12,7 @@ class WrapperNotFound(Exception):
 
 class ConfigNotFound(Exception):
     """Raised when a requested config isn't found."""
+
+
+class ProfilePropertyNotFound(Exception):
+    """Raised when a required property is missing in a profile config."""

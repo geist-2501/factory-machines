@@ -11,7 +11,7 @@ register_env(
 )
 
 register_env(
-    env_id='FMMulti-v1',
+    env_id='FMMulti-alt-v0',
     entry_point='factory_machines.envs:FactoryMachinesEnvMultiV2',
     graphing_wrapper=fm_multi_graphing_wrapper
 )

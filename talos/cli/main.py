@@ -4,19 +4,22 @@ import typer
 from gym.utils.play import play as gym_play
 from rich import print
 
-from talos.cli.cli_utils import _convert_to_key_value_list, _convert_to_key_list_value
+from talos.cli.cli_utils import _convert_to_key_value_list
 from talos.cli.config import app as config_app
 from talos.cli.list import app as list_app
 from talos.cli.talfile import talfile_app
+from talos.cli.profile import profile_app
 from talos.core import load_config, create_env_factory, get_device, create_agent, create_save_callback
 from talos.global_state import get_cli_state
 from talos.error import *
 from talos.file import TalFile
+from talos.profile import ProfileConfig
 
 app = typer.Typer()
 app.add_typer(config_app, name="config")
 app.add_typer(list_app, name="list")
 app.add_typer(talfile_app, name="talfile")
+app.add_typer(profile_app, name="profile")
 
 __app_name__ = "talos"
 __version__ = "0.1.0"
@@ -122,16 +125,17 @@ def train(
     env_factory = create_env_factory(opt_env, opt_wrapper, env_args=opt_env_args, base_seed=opt_seed)
     agent, training_wrapper = create_agent(env_factory, opt_agent, device=device)
 
-    agent_config = config[opt_agent] if opt_agent in config.sections() else config['DEFAULT']
+    config_section = config[opt_agent] if opt_agent in config.sections() else config['DEFAULT']
+    agent_config = ProfileConfig(dict(config_section), {})
     print(f"\nProceeding to train a {opt_agent} on {opt_env} with config values:")
-    print(dict(agent_config))
+    print(agent_config.to_dict())
 
     if typer.confirm("Ready to proceed?", default=True) is False:
         return
 
     training_artifacts = {}
     try:
-        save_callback = create_save_callback(opt_agent, dict(agent_config), opt_wrapper, opt_env, opt_env_args)
+        save_callback = create_save_callback(opt_agent, agent_config.to_dict(), opt_wrapper, opt_env, opt_env_args)
         training_wrapper(env_factory, agent, agent_config, training_artifacts, save_callback)
     except KeyboardInterrupt:
         print("[bold red]Training interrupted[/bold red].")
@@ -150,7 +154,7 @@ def train(
                 agent_data=data,
                 training_artifacts=training_artifacts,
                 used_wrappers=opt_wrapper,
-                config=dict(agent_config),
+                config=agent_config.to_dict(),
                 env_args=opt_env_args
             )
             talfile.write(path)
