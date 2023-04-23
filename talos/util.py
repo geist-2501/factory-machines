@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import List
 
 import numpy as np
 
@@ -38,3 +39,8 @@ def get_max_shape(array):
 
 def std_err(data) -> float:
     return np.std(data, ddof=1) / np.sqrt(np.size(data))
+
+
+def parse_int_list(raw: str) -> List[int]:
+    parts = raw.split(",")
+    return list(map(lambda part: int(part), parts))
