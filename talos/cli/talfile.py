@@ -204,5 +204,5 @@ def compare(
         should_continue = typer.confirm("Only some agents loaded, ready to proceed?", default=False)
 
     if should_continue:
-        rewards, infos = evaluate_agents(loaded_agents, n_episodes=opt_n_episodes)
-        graph_env_results(common_env_id, env_args, loaded_agents, rewards, infos)
+        scores = evaluate_agents(loaded_agents, n_episodes=opt_n_episodes)
+        graph_env_results(common_env_id, opt_env_args, loaded_agents, scores)

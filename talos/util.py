@@ -34,3 +34,7 @@ def get_max_shape(array):
     for level, length in get_dimensions(array):
         dimensions[level] = max(dimensions[level], length)
     return [value for _, value in sorted(dimensions.items())]
+
+
+def std_err(data) -> float:
+    return np.std(data, ddof=1) / np.sqrt(np.size(data))

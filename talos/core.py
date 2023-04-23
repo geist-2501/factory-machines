@@ -14,6 +14,7 @@ from talos.agent import Agent
 from talos.error import *
 from talos.file import TalFile
 from talos.registration import get_agent, get_wrapper, get_agent_graphing, get_env_graphing_wrapper
+from talos.util import std_err
 
 
 def play_agent(
@@ -59,29 +60,34 @@ def play_agent(
     return reward_history
 
 
-def evaluate_agents(loaded_agents: List[Dict], max_episode_timesteps=1000, n_episodes=3) -> Tuple[List, List]:
+def evaluate_agents(loaded_agents: List[Dict], max_episode_timesteps=1000, n_episodes=3) -> Tuple[List, List, List, List]:
     rewards = []
+    reward_errs = []
     final_infos = []
+    final_info_errs = []
     for loaded_agent in loaded_agents:
         agent = loaded_agent["agent"]
         env_factory = loaded_agent["env_factory"]
         env = env_factory(0)
         print(f"Agent {loaded_agent['agent_name']}")
-        total_reward, final_info = evaluate_agent(env, agent, n_episodes, max_episode_timesteps, verbose=True)
+        total_reward, total_reward_err, final_info, final_info_err = \
+            evaluate_agent(env, agent, n_episodes, max_episode_timesteps, verbose=True)
         rewards.append(total_reward)
+        reward_errs.append(total_reward_err)
         final_infos.append(final_info)
+        final_info_errs.append(final_info_err)
 
     print("\nComparison results:")
     for i, reward in enumerate(rewards):
         agent_name = loaded_agents[i]["agent_name"]
         print(f"Agent {agent_name}\tR:[{reward}], I:[{final_infos[i]}]")
 
-    return rewards, final_infos
+    return rewards, reward_errs, final_infos, final_info_errs
 
 
-def graph_env_results(env_id: str, env_args: Dict, loaded_agents: List[Dict], rewards: List, final_infos: List[Dict]):
+def graph_env_results(env_id: str, env_args: Dict, loaded_agents: List[Dict], scores: Tuple):
     graphing_wrapper = get_env_graphing_wrapper(env_id)
-    graphing_wrapper(env_args, [agent["agent_id"] for agent in loaded_agents], rewards, final_infos)
+    graphing_wrapper(env_args, [agent["agent_id"] for agent in loaded_agents], scores)
 
 
 def load_config(config_path: str) -> configparser.ConfigParser:
@@ -144,7 +150,7 @@ def evaluate_agent(
         n_episodes=1,
         max_episode_steps=10000,
         verbose=False
-) -> Tuple[float, Dict[str, float]]:
+) -> Tuple[float, float, Dict[str, float], Dict[str, float]]:
     total_ep_rewards = []
     total_infos = defaultdict(lambda: [])
     for ep_num in range(n_episodes):
@@ -177,10 +183,14 @@ def evaluate_agent(
 
     # Take average over total infos.
     total_infos_mean = {}
+    total_infos_err = {}
     for info, history in total_infos.items():
         total_infos_mean[info] = np.mean(history).item()
+        total_infos_err[info] = std_err(history)
 
-    return np.mean(total_ep_rewards).item(), total_infos_mean
+    reward_mean = np.mean(total_ep_rewards).item()
+    reward_err = std_err(total_ep_rewards)
+    return reward_mean, reward_err, total_infos_mean, total_infos_err
 
 
 def create_save_callback(id: str, config: Dict, used_wrappers: str, env_name: str, env_args: Dict) -> Callable:

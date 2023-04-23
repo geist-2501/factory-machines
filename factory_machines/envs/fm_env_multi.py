@@ -195,39 +195,52 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
         return self._total_num_orders - (self._num_orders_pending + len(self._open_orders))
 
 
-def fm_multi_graphing_wrapper(env_args: Dict, agent_names: List[str], rewards: List[float], extra_infos: List[Dict]):
+def _swizzle(data: List[Dict]) -> Dict:
+    """Converts a list of dictionaries to a dictionary of lists."""
+    swizzled_data = defaultdict(lambda: [])
+    for entry in data:
+        for k, v in entry.items():
+            swizzled_data[k].append(v)
+    return swizzled_data
+
+
+def fm_multi_graphing_wrapper(env_args: Dict, agent_names: List[str], scores: Tuple):
     map_id = env_args["map_id"] if "map_id" in env_args else "0"
     title = f"Performance in the Factory Machines env (map {map_id})"
 
-    num_plots = len(extra_infos[0]) + 1
-    fig, axs = plt.subplots(1, num_plots, figsize=(num_plots * 3, 3))
+    rewards, reward_errs, infos, info_errs = scores
+
+    num_plots = len(info_errs[0]) + 1
+    fig, axs = plt.subplots(num_plots, 1, figsize=(3, 2 * num_plots))
     fig.suptitle(title)
 
-    swizzled_infos = defaultdict(lambda: [])
+    swizzled_infos = _swizzle(infos)
     swizzled_infos["reward"] = rewards
-    for extra_info in extra_infos:
-        for k, v in extra_info.items():
-            swizzled_infos[k].append(v)
+
+    swizzled_errs = _swizzle(info_errs)
+    swizzled_errs["reward"] = reward_errs
 
     cmap = plt.get_cmap("tab10")
     colours = [cmap(i) for i in range(len(agent_names))]
 
     def _graph_bar(ax, metric):
         values = swizzled_infos[metric]
-        ax.bar(agent_names, values, color=colours, label=agent_names)
+        errs = swizzled_errs[metric]
+        y_pos = np.arange(len(agent_names))
+        ax.barh(y_pos, values, color=colours, xerr=errs, label=agent_names)
+        ax.set_yticks(y_pos, labels=agent_names)
         ax.set_title(metric)
-        ax.set_xticklabels(agent_names, rotation=30, ha='right')
 
     _graph_bar(axs[0], "reward")
 
     _graph_bar(axs[1], "orders per minute")
-    axs[1].set_ylabel("Orders per minute")
+    axs[1].set_xlabel("Orders per minute")
 
     _graph_bar(axs[2], "distance")
-    axs[2].set_ylabel("Distance travelled (m)")
+    axs[2].set_xlabel("Distance travelled (m)")
 
     _graph_bar(axs[3], "timesteps")
-    axs[3].set_ylabel("Time taken (s)")
+    axs[3].set_xlabel("Time taken (s)")
 
     plt.tight_layout()
     plt.show()
