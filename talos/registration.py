@@ -29,7 +29,7 @@ class WrapperSpec:
 class EnvSpec:
     """A specification for using environments with Talos. Wraps the OpenAI Gym registration ability."""
     id: str
-    graphing_wrapper: Callable[[List[str], List[float], List[Dict]], None]
+    graphing_wrapper: Callable[[Dict, List[str], Tuple], None]
 
 
 # Global registries for storing configs.
@@ -136,7 +136,7 @@ def get_wrapper(
 def register_env(
         env_id: str,
         entry_point: str,
-        graphing_wrapper: Callable[[List[str], List[float], List[Dict]], None] = _dummy_env_graphing_wrapper
+        graphing_wrapper: Callable[[Dict, List[str], Tuple], None] = _dummy_env_graphing_wrapper
 ):
     """Register an environment with Talos."""
     global env_registry
