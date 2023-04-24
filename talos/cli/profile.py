@@ -25,6 +25,11 @@ def batch(
             "--out",
             "-o",
             help="Directory to place trained agents."
+        ),
+        opt_as: str = typer.Option(
+            None,
+            "--as",
+            help="Filename override to save as."
         )
 ):
     # Load config.
@@ -44,14 +49,18 @@ def batch(
 
         target_profile = profiles[opt_target_profile]
 
-        _train_with_profile(target_profile, halt=True, out_dir=opt_out_dir)
+        _train_with_profile(target_profile, halt=True, out_dir=opt_out_dir, save_path=opt_as)
     else:
         # Train all profiles.
         for _, target_profile in profiles.items():
             _train_with_profile(target_profile, halt=False, out_dir=opt_out_dir)
 
 
-def _train_with_profile(target_profile: Profile, halt: bool = False, out_dir: str = "."):
+def _train_with_profile(target_profile: Profile, halt: bool = False, out_dir: str = ".", save_path: str = None):
+
+    if save_path is None:
+        save_path = f"{target_profile.name}.tal"
+
     device = get_device()
     print(f"Using device [bold white]{device}.[/]")
 
@@ -88,8 +97,7 @@ def _train_with_profile(target_profile: Profile, halt: bool = False, out_dir: st
             return
 
     try:
-        path = f"{target_profile.name}.tal"
-        path = os.path.join(out_dir, path)
+        path = os.path.join(out_dir, save_path)
         print(f"Saving agent to disk ([italic]{path}[/]) ...")
         data = agent.save()
         talfile = TalFile(

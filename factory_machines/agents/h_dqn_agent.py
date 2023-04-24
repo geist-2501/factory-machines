@@ -12,7 +12,7 @@ import torch.nn as nn
 from matplotlib.gridspec import GridSpec
 from tqdm import trange, tqdm
 
-from factory_machines.agents.dqn import DQN, compute_td_loss
+from factory_machines.agents.dqn import DQN, compute_td_loss, compute_double_td_loss
 from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWithStats
 from factory_machines.agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
 from factory_machines.agents.utils import can_graph, smoothen, parse_int_list, StaticLinearDecay, \
@@ -79,7 +79,7 @@ class HDQNAgent(Agent, ABC):
             net: DQN,
             net_fixed: DQN
     ):
-        return compute_td_loss(states, actions, rewards, next_states, is_done, self.gamma, net, net_fixed)
+        return compute_double_td_loss(states, actions, rewards, next_states, is_done, self.gamma, net, net_fixed)
 
     @abstractmethod
     def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:

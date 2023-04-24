@@ -196,7 +196,10 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
 
 
 def _swizzle(data: List[Dict]) -> Dict:
-    """Converts a list of dictionaries to a dictionary of lists."""
+    """
+    Converts a list of dictionaries to a dictionary of lists.
+    No, I'm not giving it a better name.
+    """
     swizzled_data = defaultdict(lambda: [])
     for entry in data:
         for k, v in entry.items():
