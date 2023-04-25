@@ -8,6 +8,7 @@ from torch import nn
 
 class DQN(nn.Module):
     """A configurable Deep Q-Network."""
+
     def __init__(self, state_dim: int, n_actions: int, hidden_layers=None, device='cpu') -> None:
         super().__init__()
 
@@ -99,14 +100,17 @@ def compute_td_loss(
         is_done: np.ndarray,
         gamma: float,
         net: DQN,
-        net_fixed: DQN
+        net_fixed: DQN,
+        deltas: int = 1
 ):
     """
     Compute the temporal difference loss for a batch of observations.
-    According to formula $$[(r + gamma * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
+    Adapted from the usual TD-error formula into a TDδ-error.
+    According to formula $$[(r + gamma^delta * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
     """
 
     actions, is_done, next_states, rewards, states = _tensorise(actions, is_done, net, next_states, rewards, states)
+    deltas = torch.tensor(deltas, device=net.device, dtype=torch.int64)
 
     predicted_qvalues = net(states)
     predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]
@@ -116,7 +120,7 @@ def compute_td_loss(
 
     next_state_values, _ = torch.max(predicted_next_qvalues, dim=1)
 
-    target_qvalues_for_actions = rewards + gamma * next_state_values
+    target_qvalues_for_actions = rewards + torch.pow(gamma, deltas) * next_state_values
     target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
 
     # mean squared error loss to minimize

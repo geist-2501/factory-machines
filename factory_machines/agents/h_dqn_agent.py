@@ -1,4 +1,3 @@
-import configparser
 import math
 from abc import ABC, abstractmethod
 from operator import itemgetter
@@ -13,9 +12,9 @@ from matplotlib.gridspec import GridSpec
 from tqdm import trange, tqdm
 
 from factory_machines.agents.dqn import DQN, compute_td_loss, compute_double_td_loss
-from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWithStats
+from factory_machines.agents.replay_buffer import ReplayBuffer, ReplayBufferWithStats, ReplayBufferWithDelta
 from factory_machines.agents.timekeeper import KCatchUpTimeKeeper, SerialTimekeeper, TimeKeeper
-from factory_machines.agents.utils import can_graph, smoothen, parse_int_list, StaticLinearDecay, \
+from factory_machines.agents.utils import can_graph, smoothen, StaticLinearDecay, \
     SuccessRateWithTimeLimitDecay, label_values
 from talos import Agent, ExtraState, EnvFactory, SaveCallback, get_cli_state, ProfileConfig
 
@@ -50,7 +49,7 @@ class HDQNAgent(Agent, ABC):
         self.n_actions = n_actions
 
         self.d1 = ReplayBufferWithStats(10 ** 4, n_goals)
-        self.d2 = ReplayBuffer(10 ** 4)
+        self.d2 = ReplayBufferWithDelta(10 ** 4)
 
         self._q2_obs_size = len(self.to_q2(obs))
         self._q1_obs_size = len(self.to_q1(obs, 0))
@@ -67,7 +66,7 @@ class HDQNAgent(Agent, ABC):
 
     def set_replay_buffer_size(self, size):
         self.d1 = ReplayBufferWithStats(size, self.n_goals)
-        self.d2 = ReplayBuffer(size)
+        self.d2 = ReplayBufferWithDelta(size)
 
     def get_loss(
             self,
@@ -154,6 +153,22 @@ class HDQNAgent(Agent, ABC):
 
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(net.params(), max_grad_norm)
+        opt.step()
+
+        return loss, grad_norm
+
+    def update_q2_net(self, opt: torch.optim.Optimizer, batch_size: int, max_grad_norm: float) -> Tuple[float, float]:
+        """
+        Update the Q2 network, making use of the meta-action timestep when calculating the loss.
+        """
+        opt.zero_grad()
+
+        (s, a, r, s_dash, delta, is_done) = self.d2.sample(batch_size)
+
+        loss = compute_td_loss(s, a, r, s_dash, is_done, self.gamma, self.q2_net, self.q2_net_fixed, delta)
+
+        loss.backward()
+        grad_norm = nn.utils.clip_grad_norm_(self.q2_net.params(), max_grad_norm)
         opt.step()
 
         return loss, grad_norm
@@ -427,6 +442,7 @@ class HDQNTrainingWrapper:
                     goal,
                     meta_r,
                     self.agent.to_q2(next_obs),
+                    meta_t,
                     done
                 )
 
@@ -439,10 +455,7 @@ class HDQNTrainingWrapper:
 
                 if learn and timekeeper.should_train_q2():
                     timekeeper.step_q2()
-                    q2_loss, q2_grad_norm = self.agent.update_net(
-                        net=self.agent.q2_net,
-                        net_fixed=self.agent.q2_net_fixed,
-                        buffer=self.agent.d2,
+                    q2_loss, q2_grad_norm = self.agent.update_q2_net(
                         opt=self.opt2,
                         batch_size=self.batch_size,
                         max_grad_norm=self.max_grad_norm
