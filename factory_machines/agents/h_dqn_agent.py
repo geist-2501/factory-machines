@@ -68,18 +68,6 @@ class HDQNAgent(Agent, ABC):
         self.d1 = ReplayBufferWithStats(size, self.n_goals)
         self.d2 = ReplayBufferWithDelta(size)
 
-    def get_loss(
-            self,
-            states: np.ndarray,
-            actions: np.ndarray,
-            rewards: np.ndarray,
-            next_states: np.ndarray,
-            is_done: np.ndarray,
-            net: DQN,
-            net_fixed: DQN
-    ):
-        return compute_double_td_loss(states, actions, rewards, next_states, is_done, self.gamma, net, net_fixed)
-
     @abstractmethod
     def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:
         raise NotImplementedError
@@ -136,28 +124,25 @@ class HDQNAgent(Agent, ABC):
         states = torch.tensor(states, device=self.device, dtype=torch.float32)
         return net.get_epsilon(states, epsilon)
 
-    def update_net(
+    def update_q1_net(
             self,
-            net: DQN,
-            net_fixed: DQN,
-            buffer: ReplayBuffer,
             batch_size,
             opt,
             max_grad_norm
     ):
         opt.zero_grad()
 
-        (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
+        (s, a, r, s_dash, is_done) = self.d1.sample(batch_size)
 
-        loss = self.get_loss(s, a, r, s_dash, is_done, net, net_fixed)
+        loss = compute_td_loss(s, a, r, s_dash, is_done, self.gamma, self.q1_net, self.q1_net_fixed)
 
         loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(net.params(), max_grad_norm)
+        grad_norm = nn.utils.clip_grad_norm_(self.q1_net.params(), max_grad_norm)
         opt.step()
 
         return loss, grad_norm
 
-    def update_q2_net(self, opt: torch.optim.Optimizer, batch_size: int, max_grad_norm: float) -> Tuple[float, float]:
+    def update_q2_net(self, opt: torch.optim.Optimizer, batch_size: int, max_grad_norm: float) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Update the Q2 network, making use of the meta-action timestep when calculating the loss.
         """
@@ -165,7 +150,7 @@ class HDQNAgent(Agent, ABC):
 
         (s, a, r, s_dash, delta, is_done) = self.d2.sample(batch_size)
 
-        loss = compute_td_loss(s, a, r, s_dash, is_done, self.gamma, self.q2_net, self.q2_net_fixed, delta)
+        loss = compute_double_td_loss(s, a, r, s_dash, is_done, self.gamma, self.q2_net, self.q2_net_fixed, delta)
 
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(self.q2_net.params(), max_grad_norm)
@@ -421,10 +406,7 @@ class HDQNTrainingWrapper:
                 # Update Q1 on every step.
                 if timekeeper.should_train_q1():
                     timekeeper.step_q1()
-                    q1_loss, q1_grad_norm = self.agent.update_net(
-                        net=self.agent.q1_net,
-                        net_fixed=self.agent.q1_net_fixed,
-                        buffer=self.agent.d1,
+                    q1_loss, q1_grad_norm = self.agent.update_q1_net(
                         opt=self.opt1,
                         batch_size=self.batch_size,
                         max_grad_norm=self.max_grad_norm

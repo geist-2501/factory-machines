@@ -109,8 +109,15 @@ def compute_td_loss(
     According to formula $$[(r + gamma^delta * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
     """
 
-    actions, is_done, next_states, rewards, states = _tensorise(actions, is_done, net, next_states, rewards, states)
-    deltas = torch.tensor(deltas, device=net.device, dtype=torch.int64)
+    states, actions, rewards, next_states, is_done, deltas = _tensorise(
+        states,
+        actions,
+        rewards,
+        next_states,
+        is_done,
+        deltas,
+        net
+    )
 
     predicted_qvalues = net(states)
     predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]
@@ -128,6 +135,7 @@ def compute_td_loss(
 
     return loss
 
+
 def compute_double_td_loss(
         states: np.ndarray,
         actions: np.ndarray,
@@ -136,9 +144,19 @@ def compute_double_td_loss(
         is_done: np.ndarray,
         gamma: float,
         net: DQN,
-        net_fixed: DQN
+        net_fixed: DQN,
+        deltas: int = 1
 ) -> torch.Tensor:
-    actions, is_done, next_states, rewards, states = _tensorise(actions, is_done, net, next_states, rewards, states)
+
+    states, actions, rewards, next_states, is_done, deltas = _tensorise(
+        states,
+        actions,
+        rewards,
+        next_states,
+        is_done,
+        deltas,
+        net
+    )
 
     predicted_qvalues = net(states)
     predicted_qvalues_for_actions = predicted_qvalues.gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
@@ -159,7 +177,7 @@ def compute_double_td_loss(
     return loss
 
 
-def _tensorise(actions, is_done, net, next_states, rewards, states):
+def _tensorise(states, actions, rewards, next_states, is_done, deltas, net: DQN):
     """Convert the numpy arrays into tensors. Yes, I could think of a better name but tensorise is funnier."""
     states = torch.tensor(states, device=net.device, dtype=torch.float32)
     actions = torch.tensor(actions, device=net.device, dtype=torch.int64)
@@ -170,5 +188,6 @@ def _tensorise(actions, is_done, net, next_states, rewards, states):
         device=net.device,
         dtype=torch.bool,
     )
+    deltas = torch.tensor(deltas, device=net.device, dtype=torch.int64)
 
-    return actions, is_done, next_states, rewards, states
+    return states, actions, rewards, next_states, is_done, deltas
