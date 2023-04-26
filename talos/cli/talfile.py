@@ -6,7 +6,8 @@ from rich import print
 
 from talos.profile import ProfileConfig
 from talos.cli.cli_utils import _convert_to_key_value_list
-from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent, graph_env_results
+from talos.core import create_env_factory, create_agent, play_agent, evaluate_agents, graph_agent, graph_env_results, \
+    dump_scores_to_csv
 from talos.error import TalfileLoadError, AgentNotFound
 from talos.file import read_talfile
 
@@ -158,6 +159,11 @@ def compare(
             "--num-episodes",
             "-n",
             help="The number of evaluation episodes to run for each agent."
+        ),
+        opt_save_as: Optional[str] = typer.Option(
+            "--save-as",
+            "-s",
+            help="Prefix to save the graphs and data as."
         )
 ):
     """
@@ -208,3 +214,5 @@ def compare(
     if should_continue:
         scores = evaluate_agents(loaded_agents, n_episodes=opt_n_episodes)
         graph_env_results(common_env_id, opt_env_args, loaded_agents, scores)
+        if opt_save_as is not None:
+            dump_scores_to_csv(f"{opt_save_as}.csv", [a["agent_id"] for a in loaded_agents], scores)

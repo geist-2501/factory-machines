@@ -22,6 +22,9 @@ class ProfileConfig:
     def getfloat(self, name: str, required=True) -> float:
         return self._get(name, float, required)
 
+    def getbool(self, name: str, required=True) -> bool:
+        return self._get(name, self._to_bool, required)
+
     def getlist(self, name: str, required=True) -> List:
         raw_list = self._get(name, required=required)
         if type(raw_list) is str:
@@ -43,6 +46,16 @@ class ProfileConfig:
 
     def to_dict(self) -> Dict:
         return dict(self._conf)  # Make a copy.
+
+    @staticmethod
+    def _to_bool(raw: str) -> bool:
+        raw = str(raw)
+        if raw in ['True', 'true', 'Yes', 'yes', '1']:
+            return True
+        elif raw in ['False', 'false', 'No', 'no', '0']:
+            return False
+
+        raise RuntimeError(f"'{raw}' is not a valid boolean property.")
 
 
 @dataclass

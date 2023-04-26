@@ -1,4 +1,5 @@
 import configparser
+import csv
 import time
 from collections import defaultdict
 from typing import List, Dict, Tuple, Callable, Any
@@ -217,3 +218,26 @@ def create_save_callback(id: str, config: Dict, used_wrappers: str, env_name: st
         talfile.write('-'.join(filename_parts))
 
     return callback
+
+
+def dump_scores_to_csv(path: str, names, scores):
+    rewards, reward_errs, infos, info_errs = scores
+
+    info_names = infos[0].keys()
+    info_headers = [info_name.replace(" ", "") for info_name in info_names]
+
+    header = ["agentid", "reward", *info_headers]
+
+    data = [header]
+    for agent_idx, agent_name in enumerate(names):
+        new_row = []
+        new_row.append(agent_name)
+        new_row.append(f"{rewards[agent_idx]:.2f} ({reward_errs[agent_idx]:.2f})")
+        for info_name in info_names:
+            new_row.append(f"{infos[agent_idx][info_name]:.2f} ({info_errs[agent_idx][info_name]:.2f})")
+
+        data.append(new_row)
+
+    with open(path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
+        writer.writerows(data)
