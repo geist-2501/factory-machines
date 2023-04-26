@@ -1,10 +1,16 @@
-# This code is shamelessly stolen from
-# https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
+from abc import ABC, abstractmethod
 from collections import deque
 from typing import Tuple
 
 import numpy as np
 import random
+
+
+class Buffer(ABC):
+    """Interface for allowing agents to pull samples while using specific `add()` methods."""
+    @abstractmethod
+    def sample(self, batch_size: int) -> Tuple:
+        raise NotImplementedError
 
 
 class _ReplayBuffer:
@@ -43,7 +49,7 @@ class _ReplayBuffer:
         return tuple(np.array(s) for s in samples)
 
 
-class ReplayBuffer:
+class ReplayBuffer(Buffer):
     def __init__(self, size):
         self._buffer = _ReplayBuffer(size)
 
@@ -80,7 +86,7 @@ class ReplayBufferWithStats(ReplayBuffer):
         return np.argmax(goal_onehot).item()
 
 
-class ReplayBufferWithDelta:
+class ReplayBufferWithDelta(Buffer):
     def __init__(self, size):
         self._buffer = _ReplayBuffer(size)
 

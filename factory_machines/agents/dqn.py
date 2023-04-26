@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from typing import List, Union
 
 import numpy as np
@@ -92,89 +93,154 @@ class DQN(nn.Module):
         return net
 
 
-def compute_td_loss(
-        states: np.ndarray,
-        actions: np.ndarray,
-        rewards: np.ndarray,
-        next_states: np.ndarray,
-        is_done: np.ndarray,
-        gamma: float,
-        net: DQN,
-        net_fixed: DQN,
-        deltas: int = 1
-):
-    """
-    Compute the temporal difference loss for a batch of observations.
-    Adapted from the usual TD-error formula into a TDδ-error.
-    According to formula $$[(r + gamma^delta * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
-    """
+class Loss(ABC):
+    @abstractmethod
+    def compute(
+            self,
+            states: np.ndarray,
+            actions: np.ndarray,
+            rewards: np.ndarray,
+            next_states: np.ndarray,
+            is_done: np.ndarray,
+            gamma: float,
+            net: DQN,
+            net_fixed: DQN,
+            deltas: int = 1
+    ):
+        raise NotImplementedError
 
-    states, actions, rewards, next_states, is_done, deltas = _tensorise(
-        states,
-        actions,
-        rewards,
-        next_states,
-        is_done,
-        deltas,
-        net
-    )
+class TDDeltaLoss(Loss):
+    def compute(
+            self,
+            states: np.ndarray,
+            actions: np.ndarray,
+            rewards: np.ndarray,
+            next_states: np.ndarray,
+            is_done: np.ndarray,
+            gamma: float,
+            net: DQN,
+            net_fixed: DQN,
+            deltas: int = 1
+    ):
+        """
+        Compute the temporal difference loss for a batch of observations.
+        Adapted from the usual TD-error formula into a TDδ-error.
+        According to formula $$[(r + gamma^delta * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
+        """
 
-    predicted_qvalues = net(states)
-    predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]
+        states, actions, rewards, next_states, is_done, deltas = _tensorise(
+            states,
+            actions,
+            rewards,
+            next_states,
+            is_done,
+            deltas,
+            net
+        )
 
-    with torch.no_grad():
-        predicted_next_qvalues = net_fixed(next_states)
+        predicted_qvalues = net(states)
+        predicted_qvalues_for_actions = predicted_qvalues[range(len(actions)), actions]
 
-    next_state_values, _ = torch.max(predicted_next_qvalues, dim=1)
+        with torch.no_grad():
+            predicted_next_qvalues = net_fixed(next_states)
 
-    target_qvalues_for_actions = rewards + torch.pow(gamma, deltas) * next_state_values
-    target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
+        next_state_values, _ = torch.max(predicted_next_qvalues, dim=1)
 
-    # mean squared error loss to minimize
-    loss = F.mse_loss(target_qvalues_for_actions, predicted_qvalues_for_actions)
+        target_qvalues_for_actions = rewards + torch.pow(gamma, deltas) * next_state_values
+        target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
 
-    return loss
+        # mean squared error loss to minimize
+        loss = F.mse_loss(target_qvalues_for_actions, predicted_qvalues_for_actions)
+
+        return loss
 
 
-def compute_double_td_loss(
-        states: np.ndarray,
-        actions: np.ndarray,
-        rewards: np.ndarray,
-        next_states: np.ndarray,
-        is_done: np.ndarray,
-        gamma: float,
-        net: DQN,
-        net_fixed: DQN,
-        deltas: int = 1
-) -> torch.Tensor:
+class TDLoss(TDDeltaLoss):
+    def compute(
+            self,
+            states: np.ndarray,
+            actions: np.ndarray,
+            rewards: np.ndarray,
+            next_states: np.ndarray,
+            is_done: np.ndarray,
+            gamma: float,
+            net: DQN,
+            net_fixed: DQN,
+            deltas: int = 1
+    ):
+        return super().compute(states, actions, rewards, next_states, is_done,gamma, net, net_fixed)
 
-    states, actions, rewards, next_states, is_done, deltas = _tensorise(
-        states,
-        actions,
-        rewards,
-        next_states,
-        is_done,
-        deltas,
-        net
-    )
 
-    predicted_qvalues = net(states)
-    predicted_qvalues_for_actions = predicted_qvalues.gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
+class TDDoubleDeltaLoss(Loss):
+    def compute(
+            self,
+            states: np.ndarray,
+            actions: np.ndarray,
+            rewards: np.ndarray,
+            next_states: np.ndarray,
+            is_done: np.ndarray,
+            gamma: float,
+            net: DQN,
+            net_fixed: DQN,
+            deltas: int = 1
+    ):
+        states, actions, rewards, next_states, is_done, deltas = _tensorise(
+            states,
+            actions,
+            rewards,
+            next_states,
+            is_done,
+            deltas,
+            net
+        )
 
-    with torch.no_grad():
-        qvalues_for_estimates = net(next_states)
-        qvalues_for_evaluation = net_fixed(next_states)
+        predicted_qvalues = net(states)
+        predicted_qvalues_for_actions = predicted_qvalues.gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
 
-    _, actions_from_estimates = qvalues_for_estimates.max(dim=1)  # Take the indices from the max, not the values.
-    evaluation_values = qvalues_for_evaluation.gather(dim=1, index=actions_from_estimates.unsqueeze(dim=1)).squeeze()
+        with torch.no_grad():
+            qvalues_for_estimates = net(next_states)
+            qvalues_for_evaluation = net_fixed(next_states)
 
-    target_qvalues_for_actions = rewards + gamma * evaluation_values
-    target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
+        _, actions_from_estimates = qvalues_for_estimates.max(dim=1)  # Take the indices from the max, not the values.
+        evaluation_values = qvalues_for_evaluation.gather(dim=1,
+                                                          index=actions_from_estimates.unsqueeze(dim=1)).squeeze()
 
-    # mean squared error loss to minimize
-    loss = F.mse_loss(target_qvalues_for_actions, predicted_qvalues_for_actions)
+        target_qvalues_for_actions = rewards + torch.pow(gamma, deltas) * evaluation_values
+        target_qvalues_for_actions = torch.where(is_done, rewards, target_qvalues_for_actions)
 
-    return loss
+        # mean squared error loss to minimize
+        loss = F.mse_loss(target_qvalues_for_actions, predicted_qvalues_for_actions)
+
+        return loss
+
+
+class TDDoubleLoss(TDDoubleDeltaLoss):
+    def compute(
+            self,
+            states: np.ndarray,
+            actions: np.ndarray,
+            rewards: np.ndarray,
+            next_states: np.ndarray,
+            is_done: np.ndarray,
+            gamma: float,
+            net: DQN,
+            net_fixed: DQN,
+            deltas: int = 1
+    ):
+        return super().compute(states, actions, rewards, next_states, is_done, gamma, net, net_fixed)
+
+
+def loss_factory(loss_name: str) -> Loss:
+    if loss_name == 'td':
+        return TDLoss()
+    elif loss_name == 'td-delta':
+        return TDDeltaLoss()
+    elif loss_name == 'td-double':
+        return TDDoubleLoss()
+    elif loss_name == 'td-double-delta':
+        return TDDoubleDeltaLoss()
+
+    raise RuntimeError(f"Loss '{loss_name}' does not exist!")
 
 
 def _tensorise(states, actions, rewards, next_states, is_done, deltas, net: DQN):

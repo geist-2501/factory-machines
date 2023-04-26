@@ -1,0 +1,62 @@
+# Details profiles for comparing the different h-DQN variants on map 2.
+---
+defaults:
+  learning_rate: 1e-4
+  init_epsilon: 1
+  final_epsilon: 0.1
+  eval_freq: 5000
+  gather_freq: 50
+  episode_max_timesteps: 1500
+  grad_clip: 1
+  k_catch_up: 10000
+  q1_decay_steps: 90000
+  pretrain_steps: 100000
+  q2_decay_steps: 900000
+  train_steps: 1000000
+  replay_buffer_size: 50000
+  batch_size: 128
+  q1_hidden_layers:
+    - 128
+    - 64
+  q2_hidden_layers:
+    - 128
+    - 64
+  refresh_target_network_freq: 2500
+  q1_loss: 'td'
+  q2_loss: 'td'
+
+final_hdqn_normal_map_2:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '2'
+  config:
+    q2_loss: 'td'
+
+final_hdqn_delta_map_2:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '2'
+  config:
+    q2_loss: 'td-delta'
+
+final_hdqn_double_map_2:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '2'
+  config:
+    q2_loss: 'td-double'
+
+final_hdqn_double_delta_map_2:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '2'
+  config:
+    q2_loss: 'td-double-delta'

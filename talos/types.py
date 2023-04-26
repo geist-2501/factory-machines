@@ -6,7 +6,7 @@ from gym import Env
 from talos.agent import Agent
 
 AgentFactory = Callable[[Any, int, str], Agent]
-EnvFactory = Callable[[int], Env]
+EnvFactory = Callable[[Optional[int]], Env]
 
 Artifacts = Dict
 SaveCallback = Callable[[Any, Artifacts, int, Optional[str]], None]
