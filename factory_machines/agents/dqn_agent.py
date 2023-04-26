@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
 from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list, label_values
 from factory_machines.agents.replay_buffer import ReplayBuffer
-from factory_machines.agents.dqn import DQN, compute_td_loss
+from factory_machines.agents.dqn import DQN, TDLoss
 from talos import Agent, ProfileConfig, get_cli_state
 
 
@@ -31,6 +31,7 @@ class DQNAgent(Agent):
         self.gamma = 0.99
         self.n_actions = n_actions
         self.device = device
+        self.loss_func = TDLoss()
 
         # Init both networks.
         obs_size = len(obs)
@@ -52,7 +53,7 @@ class DQNAgent(Agent):
             next_states: np.ndarray,
             is_done: np.ndarray
     ) -> torch.Tensor:
-        return compute_td_loss(
+        return self.loss_func.compute(
             states,
             actions,
             rewards,
