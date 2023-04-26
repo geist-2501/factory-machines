@@ -124,11 +124,8 @@ class HDQNAgent(Agent, ABC):
         states = torch.tensor(states, device=self.device, dtype=torch.float32)
         return net.get_epsilon(states, epsilon)
 
-    def update_net(
+    def update_q1_net(
             self,
-            net: DQN,
-            net_fixed: DQN,
-            buffer: Buffer,
             loss_func: Loss,
             opt: torch.optim.Optimizer,
             batch_size: int,
@@ -136,12 +133,29 @@ class HDQNAgent(Agent, ABC):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         opt.zero_grad()
 
-        (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
-
-        loss = loss_func.compute(s, a, r, s_dash, is_done, self.gamma, net, net_fixed)
+        (s, a, r, s_dash, is_done) = self.d1.sample(batch_size)
+        loss = loss_func.compute(s, a, r, s_dash, is_done, self.gamma, self.q1_net, self.q1_net_fixed)
 
         loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(net.params(), max_grad_norm)
+        grad_norm = nn.utils.clip_grad_norm_(self.q1_net.params(), max_grad_norm)
+        opt.step()
+
+        return loss, grad_norm
+
+    def update_q2_net(
+            self,
+            loss_func: Loss,
+            opt: torch.optim.Optimizer,
+            batch_size: int,
+            max_grad_norm: float
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        opt.zero_grad()
+
+        (s, a, r, s_dash, delta, is_done) = self.d2.sample(batch_size)
+        loss = loss_func.compute(s, a, r, s_dash, is_done, self.gamma, self.q2_net, self.q2_net_fixed, delta)
+
+        loss.backward()
+        grad_norm = nn.utils.clip_grad_norm_(self.q2_net.params(), max_grad_norm)
         opt.step()
 
         return loss, grad_norm
@@ -398,11 +412,8 @@ class HDQNTrainingWrapper:
                 # Update Q1 on every step.
                 if timekeeper.should_train_q1():
                     timekeeper.step_q1()
-                    q1_loss, q1_grad_norm = self.agent.update_net(
-                        net=self.agent.q1_net,
-                        net_fixed=self.agent.q1_net_fixed,
+                    q1_loss, q1_grad_norm = self.agent.update_q1_net(
                         loss_func=self.q1_loss_func,
-                        buffer=self.agent.d1,
                         opt=self.opt1,
                         batch_size=self.batch_size,
                         max_grad_norm=self.max_grad_norm
@@ -433,12 +444,9 @@ class HDQNTrainingWrapper:
 
                 if learn and timekeeper.should_train_q2():
                     timekeeper.step_q2()
-                    q2_loss, q2_grad_norm = self.agent.update_net(
-                        net=self.agent.q2_net,
-                        net_fixed=self.agent.q2_net_fixed,
+                    q2_loss, q2_grad_norm = self.agent.update_q2_net(
                         loss_func=self.q2_loss_func,
-                        buffer=self.agent.d2,
-                        opt=self.opt1,
+                        opt=self.opt2,
                         batch_size=self.batch_size,
                         max_grad_norm=self.max_grad_norm
                     )

@@ -161,6 +161,7 @@ def compare(
             help="The number of evaluation episodes to run for each agent."
         ),
         opt_save_as: Optional[str] = typer.Option(
+            None,
             "--save-as",
             "-s",
             help="Prefix to save the graphs and data as."

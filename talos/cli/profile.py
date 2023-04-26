@@ -56,6 +56,44 @@ def batch(
             _train_with_profile(target_profile, halt=False, out_dir=opt_out_dir)
 
 
+@profile_app.command()
+def train(
+        arg_profile_path: str,
+        arg_target_profile: str = typer.Argument(
+            ...,
+            help="The name of the profile to use"
+        ),
+        opt_out_dir: str = typer.Option(
+            ".",
+            "--out",
+            "-o",
+            help="Directory to place trained agents."
+        ),
+        opt_as: str = typer.Option(
+            None,
+            "--as",
+            help="Filename override to save as."
+        )
+):
+    # Load config.
+    try:
+        print(f"Loading profiles `{arg_profile_path}`... ", end="")
+        profiles = read_profile(arg_profile_path)
+        print("[bold green]success![/]")
+    except RuntimeError:
+        print("[bold green]failure![/]")
+        raise typer.Abort()
+
+    if arg_target_profile not in profiles:
+        print(f"Profile {arg_target_profile} doesn't exist in {arg_profile_path}! Choices are;")
+        print(profiles.keys())
+        raise typer.Abort()
+
+    target_profile = profiles[arg_target_profile]
+
+    _train_with_profile(target_profile, halt=True, out_dir=opt_out_dir, save_path=opt_as)
+
+
 def _train_with_profile(target_profile: Profile, halt: bool = False, out_dir: str = ".", save_path: str = None):
 
     if save_path is None:

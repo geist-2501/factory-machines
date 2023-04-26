@@ -96,5 +96,5 @@ class ReplayBufferWithDelta(Buffer):
     def add(self, obs_t, action, reward, obs_tp1, delta, done):
         self._buffer.add(obs_t, action, reward, obs_tp1, delta, done)
 
-    def sample(self, batch_size):
+    def sample(self, batch_size) -> Tuple:
         return self._buffer.sample(batch_size)
