@@ -1,6 +1,7 @@
 from factory_machines.agents.dqn_agent import DQNAgent, dqn_training_wrapper, dqn_graphing_wrapper
 from factory_machines.agents.ds_mpd_hdqn_agent import DiscreteStochasticHDQNAgent
 from factory_machines.agents.fm_hdqn_agent import FactoryMachinesHDQNAgent
+from factory_machines.agents.fm_masked_hdqn_agent import FactoryMachinesMaskedHDQNAgent
 from factory_machines.agents.gw_hdqn_agent import GridWorldHDQNAgent
 from factory_machines.agents.h_dqn_agent import hdqn_training_wrapper, hdqn_graphing_wrapper
 from factory_machines.agents.heuristics.aisled_nn_agent import AisledNNAgent
@@ -18,6 +19,13 @@ register_agent(
 register_agent(
     agent_id="FM-HDQN",
     agent_factory=lambda obs, n_actions, device: FactoryMachinesHDQNAgent(obs, n_actions, device),
+    training_wrapper=hdqn_training_wrapper,
+    graphing_wrapper=hdqn_graphing_wrapper
+)
+
+register_agent(
+    agent_id="FM-HDQN-masked",
+    agent_factory=lambda obs, n_actions, device: FactoryMachinesMaskedHDQNAgent(obs, n_actions, device),
     training_wrapper=hdqn_training_wrapper,
     graphing_wrapper=hdqn_graphing_wrapper
 )
