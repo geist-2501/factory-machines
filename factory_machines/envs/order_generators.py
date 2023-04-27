@@ -60,6 +60,24 @@ class GaussianOrderGenerator(OrderGenerator):
         return order
 
 
+class StaticOrderGenerator(OrderGenerator):
+    """
+    Repeated provides one pre-defined order. Will always keep a max of one order in circulation.
+    Good for debugging or demonstration purposes.
+    """
+
+    def __init__(self, order: np.ndarray) -> None:
+        super().__init__()
+        self._order = order
+
+    def should_make_order(self, num_current_orders: int) -> bool:
+        return num_current_orders == 0
+
+    def make_order(self, size) -> OrderType:
+        assert len(self._order) == size
+        return self._order
+
+
 class MockOrderGenerator(OrderGenerator):
     """A fake order generator for testing!"""
 

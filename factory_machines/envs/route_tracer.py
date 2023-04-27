@@ -35,7 +35,7 @@ class RouteTracer:
             n_coord += 1  # It's actually ahead by 1 since we skip the first coord.
             progress = n_coord / len(route)
             colour = from_colour.lerp(to_colour, progress)
-            width = math.ceil(self.max_width * progress)
+            width = max(math.ceil(self.max_width * progress), 1)
             pygame.draw.line(screen, colour, current_coord, next_coord, width=width)
 
             is_poi = self.pois[n_coord]
