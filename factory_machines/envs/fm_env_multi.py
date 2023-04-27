@@ -8,7 +8,7 @@ from gym.core import ActType, ObsType
 from matplotlib import pyplot as plt
 
 from factory_machines.envs.fm_env_base import FactoryMachinesEnvBase
-from factory_machines.envs.order_generators import OrderGenerator, GaussianOrderGenerator
+from factory_machines.envs.order_generators import OrderGenerator, GaussianOrderGenerator, StaticOrderGenerator
 from factory_machines.envs.pygame_utils import draw_lines
 
 
@@ -33,12 +33,15 @@ class FactoryMachinesEnvMulti(FactoryMachinesEnvBase):
             num_orders=10,
             agent_capacity=10,
             order_generator: OrderGenerator = None,
+            order_override: str = None,
             verbose=False,
             correct_obs=True
     ) -> None:
         super().__init__(render_mode, map_id, agent_capacity, verbose, correct_obs)
 
-        if order_generator is None:
+        if order_override is not None:
+            self._order_generator = StaticOrderGenerator(np.fromstring(order_override, sep=',', dtype=int))
+        elif order_generator is None:
             self._order_generator = GaussianOrderGenerator(self._map.p, self._map.max_order_size)
         else:
             self._order_generator = order_generator

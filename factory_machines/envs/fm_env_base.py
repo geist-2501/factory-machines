@@ -81,6 +81,16 @@ class FactoryMachinesEnvBase(gym.Env, ABC):
             [1, 2],
             2
         ),
+        "aisled-example": Map([
+            '...o...',
+            'dwd.dwd',
+            'dwd.dwd',
+            'dwd.dwd',
+            '.......',
+        ],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            3
+        ),
     }
 
     colors = {
