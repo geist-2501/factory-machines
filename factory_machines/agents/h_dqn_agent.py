@@ -502,8 +502,8 @@ class HDQNTrainingWrapper:
             q1_grad_norm, q2_grad_norm = grad_norm
 
             if q1_loss and q1_grad_norm:
-                self.q1_loss_history.append(q1_loss.data.cpu().numpy())
-                self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy())
+                self.q1_loss_history.append(q1_loss.data.cpu().numpy().item())
+                self.q1_grad_norm_history.append(q1_grad_norm.data.cpu().numpy().item())
 
             if q2_loss and q2_grad_norm:
                 self.q2_loss_history.append(q2_loss.data.cpu().numpy())

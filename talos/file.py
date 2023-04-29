@@ -1,6 +1,7 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union, Tuple, Callable
 from dataclasses import dataclass, field
 
+import numpy as np
 import torch
 from talos.error import TalfileLoadError
 
@@ -40,26 +41,48 @@ class TalFile:
 
         return root
 
+    def artifact_apply(self, func: Callable[[Any], Any]):
+        for k, v in self.training_artifacts.items():
+            if type(v) is tuple:
+                new_v = tuple(func(x) for x in v)
+            elif type(v) is list or type(v) is np.ndarray:
+                new_v = func(v)
+            else:
+                raise RuntimeError
+
+            self.training_artifacts[k] = new_v
+
     def set_artifact(self, path: List[str], data: Any):
         root = self.training_artifacts
-        for part_idx, part in enumerate(path):
-            is_last = part_idx == len(path) - 1
-            if type(root) is dict:
-                indexer = part
-            elif type(root) is tuple:
-                indexer = int(part)
-            else:
-                raise RuntimeError("No more appropriate entries to index!")
+        self._set_artifact_rec(path, 0, [root], data)
 
-            if is_last:
-                if type(root) is tuple:
-                    mutable_root = list(root)
-                    mutable_root[indexer] = data
-                    immutable_root = tuple(mutable_root)
-                else:
-                    root[indexer] = data
+    def _set_artifact_rec(self, path: List[str], depth: int, roots: List, data: List):
+        root = roots[-1]
+        if depth == len(path) - 1:
+            # Set.
+            if type(root) is dict:
+                key = path[depth]
+                root[key] = data
+            elif type(root) is tuple:
+                # Have to go back a step and replace the whole tuple since they're immutable.
+                key = int(path[depth])
+                data_tuple = root[:key] + tuple([data]) + root[key+1:]
+                self._set_artifact_rec(path[:-1], depth - 1, roots[:-1], data_tuple)
             else:
-                root = root[indexer]
+                raise RuntimeError("Cannot set on anything but a dict or tuple!")
+
+        else:
+            # Recurse.
+            if type(root) is dict:
+                key = path[depth]
+                new_root = root[key]
+                self._set_artifact_rec(path, depth + 1, [*roots, new_root], data)
+            elif type(root) is tuple:
+                key = int(path[depth])
+                new_root = root[key]
+                self._set_artifact_rec(path, depth + 1, [*roots, new_root], data)
+            else:
+                raise RuntimeError("Invalid path!")
 
 
 def read_talfile(path: str) -> TalFile:

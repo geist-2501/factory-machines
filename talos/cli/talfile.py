@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+import numpy as np
 import typer
 from gym.wrappers import RecordVideo
 from rich import print
@@ -218,6 +219,7 @@ def compare(
         if opt_save_as is not None:
             dump_scores_to_csv(f"{opt_save_as}.csv", [a["agent_id"] for a in loaded_agents], scores)
 
+
 @talfile_app.command()
 def prune(
         arg_talfile_path: str = typer.Argument(
@@ -270,10 +272,32 @@ def prune(
 
         typer.confirm("Continue?", default=True, abort=True)
 
-        pruned_part = [x for i, x in enumerate(artifact_part) if i % opt_prune_on == 0]
+        pruned_part = np.array([x for i, x in enumerate(artifact_part) if i % opt_prune_on == 0])
 
         talfile.set_artifact(path, pruned_part)
         talfile.write(arg_talfile_path)
 
         print(f"Prune complete, left with {len(pruned_part)} entries.")
 
+
+@talfile_app.command()
+def squeeze(
+        arg_talfile_path: str = typer.Argument(
+            ...,
+            help="Path to talfile to edit."
+        )
+):
+    try:
+        # Load talfile.
+        print(f" > Loading {arg_talfile_path}... ", end="")
+        talfile = read_talfile(arg_talfile_path)
+        print(f"[bold green]success![/]")
+
+    except RuntimeError as ex:
+        print("[bold red]failed![/] Couldn't load .tal file. " + str(ex))
+        raise typer.Abort()
+
+    talfile.artifact_apply(lambda l: np.squeeze(l))
+    talfile.write(arg_talfile_path)
+
+    print(f"Squeeze complete.")
