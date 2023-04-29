@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 from dataclasses import dataclass, field
 
 import torch
@@ -27,6 +27,39 @@ class TalFile:
                 "env_name": self.env_name,
                 "env_args": self.env_args
             }, file)
+
+    def get_artifact(self, path: List[str]) -> Any:
+        root = self.training_artifacts
+        for part in path:
+            if type(root) is dict:
+                root = root[part]
+            elif type(root) is tuple:
+                root = root[int(part)]
+            else:
+                raise RuntimeError("No more appropriate entries to index!")
+
+        return root
+
+    def set_artifact(self, path: List[str], data: Any):
+        root = self.training_artifacts
+        for part_idx, part in enumerate(path):
+            is_last = part_idx == len(path) - 1
+            if type(root) is dict:
+                indexer = part
+            elif type(root) is tuple:
+                indexer = int(part)
+            else:
+                raise RuntimeError("No more appropriate entries to index!")
+
+            if is_last:
+                if type(root) is tuple:
+                    mutable_root = list(root)
+                    mutable_root[indexer] = data
+                    immutable_root = tuple(mutable_root)
+                else:
+                    root[indexer] = data
+            else:
+                root = root[indexer]
 
 
 def read_talfile(path: str) -> TalFile:

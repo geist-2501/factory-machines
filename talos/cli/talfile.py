@@ -217,3 +217,63 @@ def compare(
         graph_env_results(common_env_id, opt_env_args, loaded_agents, scores)
         if opt_save_as is not None:
             dump_scores_to_csv(f"{opt_save_as}.csv", [a["agent_id"] for a in loaded_agents], scores)
+
+@talfile_app.command()
+def prune(
+        arg_talfile_path: str = typer.Argument(
+            ...,
+            help="Path to talfile to edit."
+        ),
+        opt_artifact_name: Optional[str] = typer.Option(
+            None,
+            "--name",
+            "-n",
+            help="Name of artifact to prune. If nested, use notation `name.index`"
+        ),
+        opt_prune_on: Optional[int] = typer.Option(
+            None,
+            "--on",
+            "-o",
+            help="Number of steps taken between removing a frame in the artifact."
+        )
+):
+    try:
+        # Load talfile.
+        print(f" > Loading {arg_talfile_path}... ", end="")
+        talfile = read_talfile(arg_talfile_path)
+        print(f"[bold green]success![/]")
+
+    except RuntimeError as ex:
+        print("[bold red]failed![/] Couldn't load .tal file. " + str(ex))
+        raise typer.Abort()
+
+    if opt_artifact_name is None:
+        # List sizes.
+        print("Talfile size:")
+        for artifact_name, artifact_values in talfile.training_artifacts.items():
+            if type(artifact_values) is tuple:
+                print(f" {artifact_name} -> ", end="")
+                for tuple_val in artifact_values:
+                    print(f"({len(tuple_val)}, {type(tuple_val)}) ", end="")
+                print()
+            else:
+                print(f" {artifact_name} -> {len(artifact_values)}, {type(artifact_values)}")
+    else:
+        assert opt_prune_on is not None, "Must have a prune on rate if pruning!"
+        path = opt_artifact_name.split('.')
+        artifact_part = talfile.get_artifact(path)
+
+        artifact_part_len = len(artifact_part)
+        print(f" {opt_artifact_name} -> {artifact_part_len} entries")
+        est_len = artifact_part_len - artifact_part_len / opt_prune_on
+        print(f" Pruning on {opt_prune_on} would leave ~{est_len :.2f} entries")
+
+        typer.confirm("Continue?", default=True, abort=True)
+
+        pruned_part = [x for i, x in enumerate(artifact_part) if i % opt_prune_on == 0]
+
+        talfile.set_artifact(path, pruned_part)
+        talfile.write(arg_talfile_path)
+
+        print(f"Prune complete, left with {len(pruned_part)} entries.")
+
