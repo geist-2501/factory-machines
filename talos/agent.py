@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
+
+import numpy as np
 
 ExtraState = Any
 
@@ -28,3 +30,7 @@ class Agent(ABC):
     def load(self, agent_data: Dict):
         """Load policy data."""
         pass
+
+    def get_q_values(self, obs) -> Optional[np.ndarray]:
+        """Get the Q-values for a given observation. Not all agents use Q-values."""
+        return None

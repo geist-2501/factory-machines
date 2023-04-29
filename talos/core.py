@@ -154,9 +154,11 @@ def evaluate_agent(
 ) -> Tuple[float, float, Dict[str, float], Dict[str, float]]:
     total_ep_rewards = []
     total_infos = defaultdict(lambda: [])
+    total_q_values = []
     for ep_num in range(n_episodes):
         obs, _ = env.reset()
         total_ep_reward = 0
+        q_values = []
         extra_state = None
         done = False
         for _ in range(max_episode_steps):
@@ -166,6 +168,9 @@ def evaluate_agent(
 
             # Some agents require extra processing (looking at you, h-DQN).
             extra_state = agent.post_step(obs, action, next_obs, extra_state)
+
+            # Measure Q-values.
+            q_values.append(np.max(agent.get_q_values(obs)))
 
             obs = next_obs
 
@@ -181,6 +186,7 @@ def evaluate_agent(
             print("[red]Agent did not complete.[/]")
 
         total_ep_rewards.append(total_ep_reward)
+        total_q_values.append(np.average(q_values))
 
     # Take average over total infos.
     total_infos_mean = {}
@@ -188,6 +194,9 @@ def evaluate_agent(
     for info, history in total_infos.items():
         total_infos_mean[info] = np.mean(history).item()
         total_infos_err[info] = std_err(history)
+
+    if verbose:
+        print(f"Avg Q-val: {np.average(total_q_values):.2f}")
 
     reward_mean = np.mean(total_ep_rewards).item()
     reward_err = std_err(total_ep_rewards)

@@ -1,6 +1,6 @@
 import configparser
 from operator import itemgetter
-from typing import Callable, Dict, Tuple, Any, List
+from typing import Callable, Dict, Tuple, Any, List, Optional
 
 import gym
 import torch
@@ -98,6 +98,9 @@ class DQNAgent(Agent):
         self.target_net.set_hidden_layers(layers)
         self.net.load_state_dict(data)
         self.target_net.load_state_dict(data)
+
+    def get_q_values(self, obs) -> Optional[np.ndarray]:
+        return self.net.get_all_action_values(obs)
 
     def set_hidden_layers(self, hidden_layers: List[int]):
         self.net.set_hidden_layers(hidden_layers)

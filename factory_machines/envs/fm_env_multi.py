@@ -212,7 +212,7 @@ def _swizzle(data: List[Dict]) -> Dict:
 
 def fm_multi_graphing_wrapper(env_args: Dict, agent_names: List[str], scores: Tuple):
     map_id = env_args["map_id"] if "map_id" in env_args else "0"
-    title = f"Performance in the Factory Machines env (map {map_id})"
+    title = f"Performance on map {map_id}"
 
     rewards, reward_errs, infos, info_errs = scores
 

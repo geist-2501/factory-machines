@@ -180,6 +180,10 @@ class HDQNAgent(Agent, ABC):
         self.q1_net.load_state_dict(q1_data)
         self.q1_net_fixed.load_state_dict(q1_data)
 
+    def get_q_values(self, obs) -> Optional[np.ndarray]:
+        q2_obs = self.to_q2(obs)
+        return self.q2_net.get_all_action_values(q2_obs)
+
     def update_q1_fixed(self):
         self.q1_net_fixed.load_state_dict(self.q1_net.state_dict())
 
