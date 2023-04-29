@@ -17,7 +17,7 @@ defaults:
   q1_loss: 'td'
   q2_loss: 'td'
 
-final_hdqn_map_0:
+final_hdqn_masked_map_0:
   agent_id: FM-HDQN-masked
   env_id: FMMulti-v0
   env_wrapper: FMRel
@@ -39,7 +39,7 @@ final_hdqn_map_0:
       - 64
     refresh_target_network_freq: 1000
 
-final_hdqn_map_1:
+final_hdqn_masked_map_1:
   agent_id: FM-HDQN-masked
   env_id: FMMulti-v0
   env_wrapper: FMRel
@@ -61,7 +61,7 @@ final_hdqn_map_1:
       - 64
     refresh_target_network_freq: 1000
 
-final_hdqn_map_2:
+final_hdqn_masked_map_2:
   agent_id: FM-HDQN-masked
   env_id: FMMulti-v0
   env_wrapper: FMRel
@@ -83,7 +83,7 @@ final_hdqn_map_2:
       - 64
     refresh_target_network_freq: 2500
 
-final_hdqn_map_3:
+final_hdqn_masked_map_3:
   agent_id: FM-HDQN-masked
   env_id: FMMulti-v0
   env_wrapper: FMRel
@@ -104,3 +104,26 @@ final_hdqn_map_3:
       - 128
       - 128
     refresh_target_network_freq: 5000
+
+final_hdqn_delta_masked_map_3:
+  agent_id: FM-HDQN-masked
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '3'
+  config:
+    k_catch_up: 10000
+    q1_decay_steps:  290000
+    pretrain_steps:  300000
+    q2_decay_steps: 1900000
+    train_steps:    2000000
+    replay_buffer_size: 80000
+    batch_size: 128
+    q1_hidden_layers:
+      - 128
+      - 128
+    q2_hidden_layers:
+      - 128
+      - 128
+    refresh_target_network_freq: 5000
+    q2_loss: 'td-delta'
