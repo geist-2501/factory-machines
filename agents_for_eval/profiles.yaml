@@ -16,6 +16,28 @@ defaults:
   q1_loss: 'td'
   q2_loss: 'td'
 
+k_catch_up_disabled_test_map_0:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '0'
+  config:
+    # k_catch_up: 10000
+    q1_decay_steps: 28000
+    pretrain_steps: 30000
+    q2_decay_steps: 380000
+    train_steps: 400000
+    replay_buffer_size: 10000
+    batch_size: 128
+    q1_hidden_layers:
+      - 128
+      - 64
+    q2_hidden_layers:
+      - 128
+      - 64
+    refresh_target_network_freq: 1000
+
 final_dqn_map_0:
   agent_id: DQN
   env_id: FMMulti-v0
