@@ -158,7 +158,7 @@ def evaluate_agent(
     for ep_num in range(n_episodes):
         obs, _ = env.reset()
         total_ep_reward = 0
-        q_values = []
+        ep_q_values = []
         extra_state = None
         done = False
         for _ in range(max_episode_steps):
@@ -170,7 +170,9 @@ def evaluate_agent(
             extra_state = agent.post_step(obs, action, next_obs, extra_state)
 
             # Measure Q-values.
-            q_values.append(np.max(agent.get_q_values(obs)))
+            q_values = agent.get_q_values(obs)
+            if q_values is not None:
+                ep_q_values.append(np.max(q_values))
 
             obs = next_obs
 
@@ -186,7 +188,7 @@ def evaluate_agent(
             print("[red]Agent did not complete.[/]")
 
         total_ep_rewards.append(total_ep_reward)
-        total_q_values.append(np.average(q_values))
+        total_q_values.append(np.average(ep_q_values))
 
     # Take average over total infos.
     total_infos_mean = {}
