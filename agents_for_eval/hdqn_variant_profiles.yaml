@@ -52,6 +52,16 @@ final_hdqn_double_map_2:
   config:
     q2_loss: 'td-double'
 
+final_hdqn_double_tuned_map_2:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '2'
+  config:
+    q2_loss: 'td-double'
+    refresh_target_network_freq: 25000
+
 final_hdqn_double_delta_map_2:
   agent_id: FM-HDQN
   env_id: FMMulti-v0
