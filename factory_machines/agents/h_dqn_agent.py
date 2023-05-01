@@ -311,7 +311,7 @@ class HDQNTrainingWrapper:
         """Main training loop for h-DQN. Support k-catch-up training."""
 
         env = self.env_factory(None)
-        timekeeper = SerialTimekeeper() if self.k_catch_up is None else KCatchUpTimeKeeper()
+        timekeeper = KCatchUpTimeKeeper()
         timekeeper.pretrain_mode()
 
         # Init D1.
@@ -342,8 +342,7 @@ class HDQNTrainingWrapper:
 
         # Train Q1 & Q2.
         timekeeper.train_mode()
-        if type(timekeeper) is KCatchUpTimeKeeper:
-            timekeeper.set_k_catch_up(self.k_catch_up)
+        timekeeper.set_k_catch_up(self.k_catch_up)
         with trange(self.train_steps, desc="Q2 Steps") as q2_progress_bar:
             with trange(self.train_steps, desc="Q1 Steps") as q1_progress_bar:
                 while timekeeper.get_q2_steps() < self.train_steps or timekeeper.get_q1_steps() < self.train_steps:
