@@ -25,14 +25,52 @@ defaults:
   q1_loss: 'td'
   q2_loss: 'td'
 
-final_hdqn_normal_map_2:
+# Map 0.
+
+final_hdqn_delta_map_0:
   agent_id: FM-HDQN
   env_id: FMMulti-v0
   env_wrapper: FMRel
   env_args:
-    map_id: '2'
+    map_id: '0'
   config:
-    q2_loss: 'td'
+    q1_decay_steps: 28000
+    pretrain_steps: 30000
+    q2_decay_steps: 380000
+    train_steps: 400000
+    replay_buffer_size: 10000
+    q2_loss: 'td-delta'
+
+final_hdqn_double_map_0:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '0'
+  config:
+    q1_decay_steps: 28000
+    pretrain_steps: 30000
+    q2_decay_steps: 380000
+    train_steps: 400000
+    replay_buffer_size: 10000
+    q2_loss: 'td-double'
+
+final_hdqn_double_tuned_map_0:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '0'
+  config:
+    q1_decay_steps: 28000
+    pretrain_steps: 30000
+    q2_decay_steps: 380000
+    train_steps: 400000
+    replay_buffer_size: 10000
+    q2_loss: 'td-double'
+    refresh_target_network_freq: 25000
+
+# Map 2.
 
 final_hdqn_delta_map_2:
   agent_id: FM-HDQN
@@ -61,12 +99,3 @@ final_hdqn_double_tuned_map_2:
   config:
     q2_loss: 'td-double'
     refresh_target_network_freq: 25000
-
-final_hdqn_double_delta_map_2:
-  agent_id: FM-HDQN
-  env_id: FMMulti-v0
-  env_wrapper: FMRel
-  env_args:
-    map_id: '2'
-  config:
-    q2_loss: 'td-double-delta'
