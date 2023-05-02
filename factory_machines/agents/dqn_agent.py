@@ -1,16 +1,16 @@
-import configparser
 from operator import itemgetter
 from typing import Callable, Dict, Tuple, Any, List, Optional
 
 import gym
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
-from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, parse_int_list, label_values
+
+from factory_machines.agents.dqn import DQN, Loss, loss_factory
 from factory_machines.agents.replay_buffer import ReplayBuffer
-from factory_machines.agents.dqn import DQN, TDLoss
+from factory_machines.agents.utils import StaticLinearDecay, smoothen, can_graph, evaluate, label_values
 from talos import Agent, ProfileConfig, get_cli_state
 
 
@@ -31,7 +31,6 @@ class DQNAgent(Agent):
         self.gamma = 0.99
         self.n_actions = n_actions
         self.device = device
-        self.loss_func = TDLoss()
 
         # Init both networks.
         obs_size = len(obs)
@@ -51,9 +50,10 @@ class DQNAgent(Agent):
             actions: np.ndarray,
             rewards: np.ndarray,
             next_states: np.ndarray,
-            is_done: np.ndarray
+            is_done: np.ndarray,
+            loss_func: Loss
     ) -> torch.Tensor:
-        return self.loss_func.compute(
+        return loss_func.compute(
             states,
             actions,
             rewards,
@@ -157,10 +157,13 @@ def train_dqn_agent(
         evaluation_freq=1000,
         gather_freq=20,
         replay_buffer_size=10**4,
-        grad_clip=5000
+        grad_clip=5000,
+        loss_name: str = "td"
 ):
     env = env_factory(0)
     state, _ = env.reset()
+
+    loss_func = loss_factory(loss_name)
 
     agent.set_hidden_layers(hidden_layers)
 
@@ -196,7 +199,7 @@ def train_dqn_agent(
 
         (s, a, r, s_dash, is_done) = buffer.sample(batch_size)
 
-        loss = agent.compute_loss(s, a, r, s_dash, is_done)
+        loss = agent.compute_loss(s, a, r, s_dash, is_done, loss_func=loss_func)
 
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(agent.parameters(), grad_clip)
@@ -297,5 +300,6 @@ def dqn_training_wrapper(
         evaluation_freq=dqn_config.getint("eval_freq"),
         gather_freq=dqn_config.getint("gather_freq"),
         replay_buffer_size=dqn_config.getint("replay_buffer_size"),
-        grad_clip=dqn_config.getint("grad_clip")
+        grad_clip=dqn_config.getint("grad_clip"),
+        loss_name=dqn_config.getstr("loss")
     )
