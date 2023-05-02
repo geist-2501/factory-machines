@@ -14,22 +14,17 @@ profile_app = typer.Typer()
 @profile_app.command()
 def batch(
         profile_path: str,
-        opt_target_profile: Optional[str] = typer.Option(
-            None,
-            "--target",
-            "-t",
-            help="Choose a specific profile from the list of profiles."
-        ),
         opt_out_dir: str = typer.Option(
             ".",
             "--out",
             "-o",
             help="Directory to place trained agents."
         ),
-        opt_as: str = typer.Option(
-            None,
-            "--as",
-            help="Filename override to save as."
+        opt_override: bool = typer.Option(
+            False,
+            "--override",
+            "-o",
+            help="If false, don't run retrain profiles that already have an file."
         )
 ):
     # Load config.
@@ -41,19 +36,9 @@ def batch(
         print("[bold green]failure![/]")
         raise typer.Abort()
 
-    if opt_target_profile is not None:
-        if opt_target_profile not in profiles:
-            print(f"Profile {opt_target_profile} doesn't exist in {profile_path}! Choices are;")
-            print(profiles.keys())
-            raise typer.Abort()
-
-        target_profile = profiles[opt_target_profile]
-
-        _train_with_profile(target_profile, halt=True, out_dir=opt_out_dir, save_path=opt_as)
-    else:
-        # Train all profiles.
-        for _, target_profile in profiles.items():
-            _train_with_profile(target_profile, halt=False, out_dir=opt_out_dir)
+    # Train all profiles.
+    for _, target_profile in profiles.items():
+        _train_with_profile(target_profile, halt=False, out_dir=opt_out_dir, override=opt_override)
 
 
 @profile_app.command()
@@ -94,10 +79,21 @@ def train(
     _train_with_profile(target_profile, halt=True, out_dir=opt_out_dir, save_path=opt_as)
 
 
-def _train_with_profile(target_profile: Profile, halt: bool = False, out_dir: str = ".", save_path: str = None):
+def _train_with_profile(
+        target_profile: Profile,
+        halt: bool = False,
+        out_dir: str = ".",
+        save_path: str = None,
+        override=False
+):
 
     if save_path is None:
         save_path = f"{target_profile.name}.tal"
+
+    path = os.path.join(out_dir, save_path)
+    if override is False and os.path.exists(path):
+        print(f"Profile {target_profile.name} already exists! To overwrite, set override to true.")
+        return
 
     device = get_device()
     print(f"Using device [bold white]{device}.[/]")
@@ -135,7 +131,6 @@ def _train_with_profile(target_profile: Profile, halt: bool = False, out_dir: st
             return
 
     try:
-        path = os.path.join(out_dir, save_path)
         print(f"Saving agent to disk ([italic]{path}[/]) ...")
         data = agent.save()
         talfile = TalFile(

@@ -44,3 +44,9 @@ def std_err(data) -> float:
 def parse_int_list(raw: str) -> List[int]:
     parts = raw.split(",")
     return list(map(lambda part: int(part), parts))
+
+
+def to_camel_case(text: str, delim: str = "_") -> str:
+    parts = text.split(delim)
+    new_text = [parts[0], *[p.capitalize() for p in parts[1:]]]
+    return ''.join(new_text)

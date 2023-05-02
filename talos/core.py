@@ -15,7 +15,7 @@ from talos.agent import Agent
 from talos.error import *
 from talos.file import TalFile
 from talos.registration import get_agent, get_wrapper, get_agent_graphing, get_env_graphing_wrapper
-from talos.util import std_err
+from talos.util import std_err, to_camel_case
 
 
 def play_agent(
@@ -235,17 +235,21 @@ def dump_scores_to_csv(path: str, names, scores):
     rewards, reward_errs, infos, info_errs = scores
 
     info_names = infos[0].keys()
-    info_headers = [info_name.replace(" ", "") for info_name in info_names]
 
-    header = ["agentid", "reward", *info_headers]
+    def _build_header(ns):
+        for n in ns:
+            n = to_camel_case(n, delim=" ")
+            yield n
+            yield n + "Err"
+
+    header = ["agentId", *_build_header(["reward", * info_names])]
 
     data = [header]
     for agent_idx, agent_name in enumerate(names):
-        new_row = []
-        new_row.append(agent_name)
-        new_row.append(f"{rewards[agent_idx]:.2f} ({reward_errs[agent_idx]:.2f})")
+        new_row = [agent_name, f"{rewards[agent_idx]:.2f}", f"{reward_errs[agent_idx]:.2f}"]
         for info_name in info_names:
-            new_row.append(f"{infos[agent_idx][info_name]:.2f} ({info_errs[agent_idx][info_name]:.2f})")
+            new_row.append(f"{infos[agent_idx][info_name]:.2f}")
+            new_row.append(f"{info_errs[agent_idx][info_name]:.2f}")
 
         data.append(new_row)
 

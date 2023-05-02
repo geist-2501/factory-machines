@@ -239,6 +239,9 @@ def prune(
             help="Number of steps taken between removing a frame in the artifact."
         )
 ):
+    """
+    Removes data from a talfile's training artifacts to reduce it's filesize.
+    """
     try:
         # Load talfile.
         print(f" > Loading {arg_talfile_path}... ", end="")
@@ -287,6 +290,9 @@ def squeeze(
             help="Path to talfile to edit."
         )
 ):
+    """
+    Removes excess array dimensions from a talfile's artifacts.
+    """
     try:
         # Load talfile.
         print(f" > Loading {arg_talfile_path}... ", end="")
