@@ -168,6 +168,28 @@ final_hdqn_map_2:
       - 64
     refresh_target_network_freq: 2500
 
+final_hdqn_map_alt_2:
+  agent_id: FM-HDQN
+  env_id: FMMulti-alt-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '2'
+  config:
+    k_catch_up: 10000
+    q1_decay_steps:   90000
+    pretrain_steps:  100000
+    q2_decay_steps:  900000
+    train_steps:    1000000
+    replay_buffer_size: 50000
+    batch_size: 128
+    q1_hidden_layers:
+      - 128
+      - 64
+    q2_hidden_layers:
+      - 128
+      - 64
+    refresh_target_network_freq: 2500
+
 final_hdqn_map_3:
   agent_id: FM-HDQN
   env_id: FMMulti-v0
