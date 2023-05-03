@@ -1,0 +1,5 @@
+agentId,reward,rewardErr,timesteps,timestepsErr,distance,distanceErr,ordersPerMinute,ordersPerMinuteErr
+FM-AisledNN,159.15,3.54,139.30,7.63,116.20,7.12,4.44,0.27
+FM-HDQN-MD,105.40,5.17,232.20,8.89,207.60,8.57,2.62,0.11
+FM-HDQN-masked,87.70,5.55,269.40,11.35,244.20,10.45,2.26,0.10
+FM-Highest,77.70,4.52,295.20,9.50,272.20,8.95,2.05,0.06
