@@ -16,8 +16,8 @@ class OrderWorldBasicTest(unittest.TestCase):
         _, r1, _, _, _ = env.step(0)
         _, r2, _, _, _ = env.step(1)
 
-        self.assertAlmostEqual(r1, -1.2)
-        self.assertAlmostEqual(r2, -1.28)
+        self.assertAlmostEqual(r1, -1 - 2)
+        self.assertAlmostEqual(r2, -2 - 2)
 
     def test_should_give_no_reward_on_output(self):
         env = OrderWorldBasic(generator=MockOrderGenerator([
@@ -27,7 +27,7 @@ class OrderWorldBasicTest(unittest.TestCase):
         env.reset()
         _, r, _, _, _ = env.step(3)
 
-        self.assertAlmostEqual(r, 0)
+        self.assertAlmostEqual(r, -0.5)
 
     def test_should_give_reward_on_order_complete(self):
         env = OrderWorldBasic(generator=MockOrderGenerator([
@@ -42,9 +42,9 @@ class OrderWorldBasicTest(unittest.TestCase):
         _, r2, _, _, _ = env.step(2)
         _, r3, _, _, _ = env.step(3)
 
-        self.assertAlmostEqual(r1, 1 - 0.2)
-        self.assertAlmostEqual(r2, 1 - 0.2)
-        self.assertAlmostEqual(r3, 12 - 0.28)
+        self.assertAlmostEqual(r1, 1 - 1)
+        self.assertAlmostEqual(r2, 1 - 1)
+        self.assertAlmostEqual(r3, 12 - 2)
 
 
 if __name__ == '__main__':

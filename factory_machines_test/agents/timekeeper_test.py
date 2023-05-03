@@ -37,11 +37,12 @@ class TimekeeperTest(unittest.TestCase):
 
     def test_timekeeper_should_allow_q1_training(self):
         timekeeper = KCatchUpTimeKeeper()
-        repeat(lambda: timekeeper.step_q1(), 3)
         timekeeper.set_k_catch_up(5)
+        timekeeper.train_mode()
+        repeat(lambda: timekeeper.step_q1(), 3)
         self.assertTrue(timekeeper.should_train_q1())
         self._step(timekeeper, 3)
-        self.assertTrue(timekeeper.should_train_q1())
+        self.assertFalse(timekeeper.should_train_q1())
         self._step(timekeeper, 2)
         self.assertFalse(timekeeper.should_train_q1())
         self._meta(timekeeper, 8)

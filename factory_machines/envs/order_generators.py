@@ -9,7 +9,7 @@ OrderType = TypeVar("OrderType")
 class OrderGenerator(ABC):
     """Abstract base class for generating an order."""
     @abstractmethod
-    def should_make_order(self, num_current_orders: int) -> bool:
+    def should_make_order(self, num_current_orders: int,  elapsed_steps=1) -> bool:
         """Check whether a new order should be made."""
         raise NotImplementedError
 
@@ -22,7 +22,7 @@ class OrderGenerator(ABC):
 class BinomialOrderGenerator(OrderGenerator):
     """Order generator that that has a binomial probability for each item."""
 
-    def should_make_order(self, num_current_orders: int) -> bool:
+    def should_make_order(self, num_current_orders: int,  elapsed_steps=1) -> bool:
         return bool(np.random.binomial(1, 0.1)) or num_current_orders == 0
 
     def make_order(self, size) -> OrderType:
@@ -70,7 +70,7 @@ class StaticOrderGenerator(OrderGenerator):
         super().__init__()
         self._order = order
 
-    def should_make_order(self, num_current_orders: int) -> bool:
+    def should_make_order(self, num_current_orders: int,  elapsed_steps=1) -> bool:
         return num_current_orders == 0
 
     def make_order(self, size) -> OrderType:
@@ -85,7 +85,7 @@ class MockOrderGenerator(OrderGenerator):
         super().__init__()
         self._orders = orders
 
-    def should_make_order(self, num_current_orders: int) -> bool:
+    def should_make_order(self, num_current_orders: int, elapsed_steps=1) -> bool:
         if len(self._orders) == 0:
             return False
 

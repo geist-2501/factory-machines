@@ -5,6 +5,9 @@ import numpy as np
 from gym.core import RenderFrame, ActType, ObsType
 from gym import spaces
 
+from factory_machines.envs import FactoryMachinesEnvMulti
+from factory_machines.envs.order_generators import OrderGenerator
+
 
 class MockEnv(gym.Env):
     """A mock environment that mimics the observations of the factory machines environments."""
@@ -34,6 +37,7 @@ class MockEnv(gym.Env):
             "agent_inv": np.array(dummy_queues),
             "depot_locs": self._depot_locs.flatten(),
             "depot_queues": np.array(dummy_queues),
+            "depot_ages": np.array(dummy_queues) * 2,
             "output_loc": self._output_loc,
         }
 

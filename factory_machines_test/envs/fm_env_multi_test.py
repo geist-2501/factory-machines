@@ -37,15 +37,15 @@ class FMEnvMultiTest(unittest.TestCase):
 
         self._go(env, self._down, 3)
         _, r, _, _, _ = env.step(self._grab)
-        self.assertAlmostEqual(r, 0.4)
+        self.assertAlmostEqual(r, 0.5)
         self._go(env, self._right, 4)
         _, r, _, _, _ = env.step(self._grab)
-        self.assertAlmostEqual(r, 0.4)
+        self.assertAlmostEqual(r, 0.5)
         self._go(env, self._left, 4)
         self._go(env, self._up, 2)
         _, r, term, _, _ = env.step(self._up)
 
-        self.assertAlmostEqual(r, 100 + 20 + 2 + 6 - 0.1)
+        self.assertAlmostEqual(r, 100 + 20 + 6 - 0.5)
         self.assertTrue(term)
 
     def test_should_get_correct_depot_ages(self):
@@ -70,7 +70,7 @@ class FMEnvMultiTest(unittest.TestCase):
 
         self.assertEqual(ages[0], 0)  # 10 ts old.
         self.assertEqual(ages[1], 3)  # 108 ts old.
-        self.assertEqual(ages[2], 1)  # 64 ts old.
+        self.assertEqual(ages[2], 3)  # 64 ts old.
 
         pass
 
