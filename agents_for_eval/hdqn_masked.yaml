@@ -115,9 +115,9 @@ final_hdqn_delta_masked_map_3:
     k_catch_up: 10000
     q1_decay_steps:  290000
     pretrain_steps:  300000
-    q2_decay_steps: 1900000
-    train_steps:    2000000
-    replay_buffer_size: 80000
+    q2_decay_steps: 3900000
+    train_steps:    4000000
+    replay_buffer_size: 100000
     batch_size: 128
     q1_hidden_layers:
       - 128
@@ -125,5 +125,5 @@ final_hdqn_delta_masked_map_3:
     q2_hidden_layers:
       - 128
       - 128
-    refresh_target_network_freq: 5000
+    refresh_target_network_freq: 10000
     q2_loss: 'td-delta'
