@@ -20,7 +20,7 @@ class FactoryMachinesEnvMultiV2(FactoryMachinesEnvMulti):
 
     def _sample_age_reward(self, age: int) -> float:
         compressed_age = self._get_age(age)
-        reward_ratio = (self._age_bands - compressed_age) / self._max_age
+        reward_ratio = (self._max_age - compressed_age) / self._max_age
 
         return reward_ratio * self._max_age_reward
 
