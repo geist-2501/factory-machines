@@ -23,7 +23,7 @@ def batch(
         opt_override: bool = typer.Option(
             False,
             "--override",
-            "-o",
+            "-x",
             help="If false, don't run retrain profiles that already have an file."
         )
 ):
@@ -58,6 +58,12 @@ def train(
             None,
             "--as",
             help="Filename override to save as."
+        ),
+        opt_override: bool = typer.Option(
+            False,
+            "--override",
+            "-x",
+            help="If false, don't run retrain profiles that already have an file."
         )
 ):
     # Load config.
@@ -76,7 +82,7 @@ def train(
 
     target_profile = profiles[arg_target_profile]
 
-    _train_with_profile(target_profile, halt=True, out_dir=opt_out_dir, save_path=opt_as)
+    _train_with_profile(target_profile, halt=True, out_dir=opt_out_dir, save_path=opt_as, override=opt_override)
 
 
 def _train_with_profile(

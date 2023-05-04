@@ -12,7 +12,6 @@ def _format_map_name(raw: str) -> str:
 
 def _graph_barh(ax, maps, property_name):
     map_names = [m["name"] for m in maps]
-    show_labels = len(map_names) > 1
     agent_names = [a["id"] for a in maps[0]["agents"]]
     y_pos = np.arange(len(map_names))
     cmap = plt.get_cmap("tab10")
@@ -27,9 +26,8 @@ def _graph_barh(ax, maps, property_name):
         ax.barh(y_pos + offset, data, height=height, color=colours[agent_idx], label=agent_name)
         multiplier += 1
 
-    if show_labels:
-        ax.set_yticks(y_pos + height, labels=map_names)
-        ax.legend(loc="lower right")
+    ax.set_yticks(y_pos + height, labels=map_names)
+    ax.legend(loc="lower right")
 
     ax.invert_yaxis()  # labels read top-to-bottom
 
@@ -52,6 +50,51 @@ def _parse_csv(row, name: str) -> float:
         return 0
     else:
         return float(value)
+
+
+def _graph_barh_single(ax, m, property_name):
+    agent_names = [a["id"] for a in m["agents"]]
+    y_pos = np.arange(len(agent_names))
+    cmap = plt.get_cmap("tab10")
+    colours = [cmap(i) for i in range(len(agent_names))]
+
+    data = [m["agents"][agent_idx][property_name] for agent_idx in range(len(agent_names))]
+    ax.barh(y_pos, data, color=colours)
+
+    ax.set_yticks(y_pos, labels=agent_names)
+
+    ax.invert_yaxis()  # labels read top-to-bottom
+
+
+def graph_multiple(maps):
+    fig, (ax_reward, ax_orders) = plt.subplots(2, 1)
+
+    _graph_barh(ax_reward, maps, "reward")
+    ax_reward.set_xlim(0, 300)
+    ax_reward.set_title("Average episode reward")
+
+    _graph_barh(ax_orders, maps, "ordersPerMinute")
+    ax_orders.set_title("Average orders completed per minute")
+    ax_orders.set_xlabel("Orders/minute")
+    ax_orders.set_xlim(0, 15)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def graph_single(m):
+    map_name = m["name"]
+    fig, (ax_reward, ax_orders) = plt.subplots(2, 1)
+
+    _graph_barh_single(ax_reward, m, "reward")
+    ax_reward.set_title(f"Average episode reward on {map_name}")
+
+    _graph_barh_single(ax_orders, m, "ordersPerMinute")
+    ax_orders.set_title(f"Average orders completed per minute on {map_name}")
+    ax_orders.set_xlabel("Orders/minute")
+
+    plt.tight_layout()
+    plt.show()
 
 
 def main():
@@ -82,21 +125,10 @@ def main():
                 "agents": agents
             })
 
-    fig, (ax_reward, ax_orders) = plt.subplots(2, 1)
-
-    _graph_barh(ax_reward, maps, "reward")
-    ax_reward.set_xlim(0, 300)
-
-    ax_reward.set_title("Average episode reward")
-
-    _graph_barh(ax_orders, maps, "ordersPerMinute")
-
-    ax_orders.set_title("Average orders completed per minute")
-    ax_orders.set_xlabel("Orders/minute")
-    ax_orders.set_xlim(0, 15)
-
-    plt.tight_layout()
-    plt.show()
+    if len(csvs) > 1:
+        graph_multiple(maps)
+    else:
+        graph_single(maps[0])
 
 
 if __name__ == '__main__':
