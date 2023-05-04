@@ -170,7 +170,7 @@ final_hdqn_map_2:
 
 final_hdqn_map_alt_2:
   agent_id: FM-HDQN
-  env_id: FMMulti-v1
+  env_id: FMMulti-alt-v0
   env_wrapper: FMRel
   env_args:
     map_id: '2'
