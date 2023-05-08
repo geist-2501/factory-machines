@@ -70,14 +70,19 @@ class HDQNAgent(Agent, ABC):
 
     @abstractmethod
     def get_intrinsic_reward(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> float:
+        """
+        Get the intrinsic reward r_{int} from the internal critic.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def goal_satisfied(self, obs: DictObsType, action: ActType, next_obs: DictObsType, goal: ActType) -> bool:
+        """
+        Determine whether the goal is considered complete. _Not_ the same as whether a reward was gained.
+        """
         raise NotImplementedError
 
     def get_action(self, obs: DictObsType, extra_state=None, only_q1=False) -> Tuple[ActType, Any]:
-        """Get the optimal action given a state."""
 
         goal = extra_state  # Treat the extra state we're given as the goal.
         if goal is None:
@@ -342,7 +347,7 @@ class HDQNTrainingWrapper:
 
         # Train Q1 & Q2.
         timekeeper.train_mode()
-        timekeeper.set_k_catch_up(self.k_catch_up)
+        timekeeper.set_k_catch_up(self.k_catch_up)  # If k is not set, serial training will be used.
         with trange(self.train_steps, desc="Q2 Steps") as q2_progress_bar:
             with trange(self.train_steps, desc="Q1 Steps") as q1_progress_bar:
                 while timekeeper.get_q2_steps() < self.train_steps or timekeeper.get_q1_steps() < self.train_steps:
@@ -363,6 +368,8 @@ class HDQNTrainingWrapper:
             learn=True,
             show_progress=True
     ):
+        """Plays out a single episode until termination or timeout."""
+
         if learn:
             assert timekeeper is not None, "Cannot learn without a timekeeper!"
 

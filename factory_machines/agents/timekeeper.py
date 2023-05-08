@@ -56,6 +56,8 @@ class TimeKeeper:
 
 
 class KCatchUpTimeKeeper(TimeKeeper):
+    """Timekeeper that implements K-catch-up training for h-DQN."""
+
     def __init__(self) -> None:
         super().__init__()
         self.k = None

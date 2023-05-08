@@ -3,6 +3,9 @@ from factory_machines.agents.h_dqn_agent import DictObsType, FlatObsType, ActTyp
 
 
 class FactoryMachinesMaskedHDQNAgent(FactoryMachinesHDQNAgent):
+    """
+    Extension of the HDQN agent for FM-Multi. Uses observation masking to improve scalability.
+    """
     def to_q1(self, obs: DictObsType, goal: ActType) -> FlatObsType:
         offset = goal * 2
         goal_depot_loc = [*obs["depot_locs"], *obs["output_loc"]][offset:offset + 2]

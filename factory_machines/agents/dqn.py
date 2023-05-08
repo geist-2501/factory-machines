@@ -94,6 +94,8 @@ class DQN(nn.Module):
 
 
 class Loss(ABC):
+    """Base class for a loss function."""
+
     @abstractmethod
     def compute(
             self,
@@ -107,9 +109,20 @@ class Loss(ABC):
             net_fixed: DQN,
             deltas: int = 1
     ):
+        """
+        Compute the loss.
+        """
+
         raise NotImplementedError
 
+
 class TDDeltaLoss(Loss):
+    """
+    Compute the temporal difference loss for a batch of observations.
+    Adapted from the usual TD-error formula into a TDδ-error.
+    According to formula $$[(r + gamma^delta * max_{a'} Q(s', a'; theta^-)) - Q(s, a; theta)]^2$$
+    """
+
     def compute(
             self,
             states: np.ndarray,
@@ -122,12 +135,6 @@ class TDDeltaLoss(Loss):
             net_fixed: DQN,
             deltas: int = 1
     ):
-        """
-        Compute the temporal difference loss for a batch of observations.
-        Adapted from the usual TD-error formula into a TDδ-error.
-        According to formula $$[(r + gamma^delta * max_{g'} Q(s', g'; theta^-)) - Q(s, g; theta)]^2$$
-        """
-
         states, actions, rewards, next_states, is_done, deltas = _tensorise(
             states,
             actions,
@@ -156,6 +163,11 @@ class TDDeltaLoss(Loss):
 
 
 class TDLoss(TDDeltaLoss):
+    """
+    Compute the temporal difference loss for a batch of observations.
+    According to formula $$[(r + gamma * max_{a'} Q(s', a'; theta^-)) - Q(s, a; theta)]^2$$
+    """
+
     def compute(
             self,
             states: np.ndarray,
@@ -172,6 +184,12 @@ class TDLoss(TDDeltaLoss):
 
 
 class TDDoubleDeltaLoss(Loss):
+    """
+    Compute the temporal difference loss for a batch of observations.
+    Implements DDQN loss, and is adapted from the usual TD-error formula into a TDδ-error.
+    According to formula $$[(r + gamma^delta * Q(s', argmax_{a'} Q(s', a'; theta) ; theta^-)) - Q(s, g; theta)]^2$$
+    """
+
     def compute(
             self,
             states: np.ndarray,
@@ -215,6 +233,12 @@ class TDDoubleDeltaLoss(Loss):
 
 
 class TDDoubleLoss(TDDoubleDeltaLoss):
+    """
+    Compute the temporal difference loss for a batch of observations.
+    Implements DDQN loss.
+    According to formula $$[(r + gamma * Q(s', argmax_{a'} Q(s', a'; theta) ; theta^-)) - Q(s, g; theta)]^2$$
+    """
+
     def compute(
             self,
             states: np.ndarray,
@@ -231,6 +255,8 @@ class TDDoubleLoss(TDDoubleDeltaLoss):
 
 
 def loss_factory(loss_name: str) -> Loss:
+    """Gets the appropriate loss function from a name."""
+
     if loss_name == 'td':
         return TDLoss()
     elif loss_name == 'td-delta':

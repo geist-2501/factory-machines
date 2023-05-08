@@ -4,6 +4,9 @@ from factory_machines.agents.h_dqn_agent import HDQNAgent, DictObsType, ActType,
 
 
 class GridWorldHDQNAgent(HDQNAgent):
+    """
+    HDQN agent for the GridWorld environment. Just for testing.
+    """
 
     up, left, down, right, grab = range(5)
 

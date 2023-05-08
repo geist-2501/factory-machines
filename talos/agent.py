@@ -19,6 +19,7 @@ class Agent(ABC):
         pass
 
     def post_step(self, obs, action, next_obs, extra_state: ExtraState = None) -> ExtraState:
+        """Perform any post-processing on the extra state."""
         return extra_state
 
     @abstractmethod

@@ -5,6 +5,9 @@ from factory_machines.agents.utils import flatten
 
 
 class FactoryMachinesHDQNAgent(HDQNAgent):
+    """
+    HDQN agent for the FactoryMachinesMultiEnv.
+    """
 
     up, left, down, right, grab = range(5)
 
@@ -39,10 +42,10 @@ class FactoryMachinesHDQNAgent(HDQNAgent):
             return np.array_equal(goal_depot_loc, [0, 0]) and action == self.grab
 
     def to_q1(self, obs: DictObsType, goal: ActType) -> FlatObsType:
-        return super().to_q1(flatten(obs), goal)  # TODO try with narrower state.
+        return super().to_q1(flatten(obs), goal)
 
     def to_q2(self, obs: DictObsType) -> FlatObsType:
-        return flatten(obs)  # TODO try with narrower state.
+        return flatten(obs)
 
     def goal_to_str(self, goal: ActType) -> str:
         if goal == self.n_goals - 1:

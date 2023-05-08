@@ -127,22 +127,6 @@ def _play_into_buffer(
     return s
 
 
-# timesteps_per_epoch = 1
-# batch_size = 32
-# total_steps = 4 * 10**4
-# decay_steps = 1 * 10**4
-#
-# opt = torch.optim.Adam(agent.parameters(), lr=1e-4)
-#
-# init_epsilon = 1
-# final_epsilon = 0.1
-#
-# loss_freq = 20
-# refresh_target_network_freq = 100
-# eval_freq = 1000
-#
-# max_grad_norm = 5000
-
 def train_dqn_agent(
         env_factory: Callable[[int], gym.Env],
         agent: DQNAgent,
@@ -190,6 +174,7 @@ def train_dqn_agent(
     artifacts["loss"] = loss_history
     artifacts["grad_norm"] = grad_norm_history
 
+    # Train on a per-step basis. If the episode ends, the environment is reset automatically.
     for step in trange(0, max_steps):
         opt.zero_grad()
 

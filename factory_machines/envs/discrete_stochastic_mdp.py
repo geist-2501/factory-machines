@@ -10,6 +10,19 @@ from factory_machines.envs.pygame_utils import draw_lines
 
 
 class DiscreteStochasticMDP(gym.Env):
+    """
+    Environment for testing.
+
+    Consists of 6 states. The leftmost is the terminal state, which achieves a reward of 0.01. Going to the rightmost
+    state changes the reward to 1. There are two actions, left or right.
+
+    v exit    v gives reward of 1
+    X . . . . G
+
+    Actions:
+     0 - left - 100% chance of going left.
+     1 - right - 50% chance of going left, 50% chance of going right.
+    """
 
     metadata = {"render_modes": ["ansi", "rgb_array"], "render_fps": 4}
     _left = 0

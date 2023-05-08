@@ -14,6 +14,8 @@ class Buffer(ABC):
 
 
 class _ReplayBuffer:
+    """Datastructure for a replay buffer that supports arbitrary tuples."""
+
     def __init__(self, size: int):
         self._storage = deque(maxlen=size)
         self.max_size = size
@@ -50,6 +52,7 @@ class _ReplayBuffer:
 
 
 class ReplayBuffer(Buffer):
+    """Replay buffer that supports (s, a, r, s', is_done) tuples."""
     def __init__(self, size):
         self._buffer = _ReplayBuffer(size)
 
@@ -64,6 +67,11 @@ class ReplayBuffer(Buffer):
 
 
 class ReplayBufferWithStats(ReplayBuffer):
+    """
+    Replay buffer that supports (s, a, r, s', is_done) tuples.
+    Also tracks statistics on goals via the `contents` variable.
+    """
+
     def __init__(self, size, n_goals):
         super().__init__(size)
         self.n_goals = n_goals
@@ -87,6 +95,8 @@ class ReplayBufferWithStats(ReplayBuffer):
 
 
 class ReplayBufferWithDelta(Buffer):
+    """Replay buffer that supports (s, a, r, s', δ, is_done) tuples."""
+
     def __init__(self, size):
         self._buffer = _ReplayBuffer(size)
 

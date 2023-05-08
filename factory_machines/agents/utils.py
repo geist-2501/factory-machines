@@ -86,7 +86,12 @@ class PermanentMemory:
 
 
 class SuccessRateBasedDecay:
+    """Epsilon decay based on the success rate of the agent."""
+
     def __init__(self, start_value, final_value, min_steps, memory_size: int = None):
+        """
+        :param memory_size: Size of the memory to use for the success rate. If None, a permanent memory is used.
+        """
         self._decay_limit = StaticLinearDecay(start_value, final_value, min_steps)
         self.start_value = start_value
         self.final_value = final_value

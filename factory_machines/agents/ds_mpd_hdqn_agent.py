@@ -4,6 +4,9 @@ from factory_machines.agents.h_dqn_agent import HDQNAgent, DictObsType, FlatObsT
 
 
 class DiscreteStochasticHDQNAgent(HDQNAgent):
+    """
+    HDQN agent for the DiscreteStochastic environment. For testing, really.
+    """
 
     def __init__(self, obs: DictObsType, n_actions: int, device: str = 'cpu') -> None:
         n_goals = len(obs)
