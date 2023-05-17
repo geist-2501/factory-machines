@@ -16,6 +16,28 @@ defaults:
   q1_loss: 'td'
   q2_loss: 'td-delta'
 
+debug_hdqn_map_0:
+  agent_id: FM-HDQN
+  env_id: FMMulti-v0
+  env_wrapper: FMRel
+  env_args:
+    map_id: '0'
+  config:
+    k_catch_up: 10000
+    q1_decay_steps:   19000
+    pretrain_steps:   20000
+    q2_decay_steps:  900000
+    train_steps:    1000000
+    replay_buffer_size: 10000
+    batch_size: 128
+    q1_hidden_layers:
+      - 64
+      - 64
+    q2_hidden_layers:
+      - 64
+      - 64
+    refresh_target_network_freq: 2500
+
 debug_hdqn_map_2:
   agent_id: FM-HDQN
   env_id: FMMulti-v0
