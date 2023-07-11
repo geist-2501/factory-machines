@@ -2,6 +2,9 @@
 
 The code repo for my CS5199 Master’s dissertation.
 
+The repackaged and revised versions of the AIs can be found in the [pytorch-h-dqn-md](https://github.com/geist-2501/pytorch-h-dqn-md) repo, 
+and Talos, now renamed to Crete, can be found in the [respective repo](https://github.com/geist-2501/crete).
+
 The `./factory_machines/agents` directory contains;
  
  - A DQN implementation.
